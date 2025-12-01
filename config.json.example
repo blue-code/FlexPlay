@@ -1,0 +1,12 @@
+{
+  "video_folders": [
+    {
+      "name": "Main Videos",
+      "path": "/path/to/your/videos"
+    },
+    {
+      "name": "Movies",
+      "path": "/path/to/your/movies"
+    }
+  ]
+}

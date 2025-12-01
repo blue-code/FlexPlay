@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlexPlay - Flexible Video Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .video-list-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .video-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .video-list-header h2 {
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+
+        .folder-filter {
+            background: #f0f4ff;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .folder-filter h3 {
+            color: #333;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+        }
+
+        .folder-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .folder-checkbox {
+            display: flex;
+            align-items: center;
+            padding: 6px;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .folder-checkbox:hover {
+            background: #e8ecff;
+        }
+
+        .folder-checkbox input {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .folder-checkbox label {
+            cursor: pointer;
+            flex: 1;
+            font-size: 0.9em;
+            color: #333;
+        }
+
+        .folder-count {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .select-all-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-top: 8px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        .select-all-btn:hover {
+            background: #218838;
+        }
+
+        .video-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+
+        .video-item:hover {
+            background: #e9ecef;
+            border-left-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .video-item.active {
+            background: #e7e9fc;
+            border-left-color: #667eea;
+        }
+
+        .video-item-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            word-break: break-word;
+        }
+
+        .video-item-info {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            margin-top: 8px;
+            transition: background 0.3s;
+        }
+
+        .delete-btn:hover {
+            background: #c82333;
+        }
+
+        .player-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            max-height: 70vh;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .control-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .control-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .control-btn:active {
+            transform: translateY(0);
+        }
+
+        .speed-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .speed-btn {
+            flex: 1;
+            min-width: 70px;
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .speed-btn:hover {
+            background: #218838;
+        }
+
+        .speed-btn.active {
+            background: #1e7e34;
+            box-shadow: inset 0 3px 5px rgba(0,0,0,0.2);
+        }
+
+        .info-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .info-panel h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .info-panel p {
+            color: #666;
+            margin-bottom: 5px;
+            font-size: 0.95em;
+        }
+
+        .history-section {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .history-section h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .history-item {
+            background: white;
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .history-item:hover {
+            background: #fff8e1;
+        }
+
+        .no-video {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .keyboard-shortcuts {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border-left: 4px solid #0066cc;
+        }
+
+        .keyboard-shortcuts h3 {
+            color: #004085;
+            margin-bottom: 10px;
+        }
+
+        .keyboard-shortcuts ul {
+            list-style: none;
+            color: #004085;
+            font-size: 0.9em;
+        }
+
+        .keyboard-shortcuts li {
+            margin-bottom: 5px;
+        }
+
+        .keyboard-shortcuts kbd {
+            background: #004085;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            margin-right: 5px;
+        }
+
+        .edit-section {
+            background: #fff3e0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border-left: 4px solid #ff9800;
+        }
+
+        .edit-section h3 {
+            color: #e65100;
+            margin-bottom: 10px;
+        }
+
+        .edit-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .edit-btn {
+            background: #ff9800;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .edit-btn:hover {
+            background: #f57c00;
+        }
+
+        .edit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .segment-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .segment-item {
+            background: white;
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .segment-remove {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .segment-remove:hover {
+            background: #c82333;
+        }
+
+        .progress-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .progress-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            min-width: 300px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        @media (max-width: 968px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .video-list-container {
+                max-height: 40vh;
+            }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #dc3545;
+        }
+
+        .codec-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 4px solid #ffc107;
+            font-size: 0.9em;
+            display: none;
+        }
+
+        .codec-warning strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 FlexPlay</h1>
+
+        <div class="main-layout">
+            <!-- Video List -->
+            <div class="video-list-container">
+                <div class="video-list-header">
+                    <h2>영상 목록</h2>
+                    <button class="refresh-btn" onclick="loadVideos()">새로고침</button>
+                </div>
+
+                <!-- 폴더 필터 -->
+                <div class="folder-filter" id="folderFilter">
+                    <h3>📁 폴더 선택</h3>
+                    <div id="folderList" class="folder-list">
+                        <div class="loading" style="font-size: 0.9em;">로딩 중...</div>
+                    </div>
+                    <button class="select-all-btn" onclick="toggleAllFolders()">전체 선택/해제</button>
+                </div>
+
+                <div id="videoList" class="loading">로딩 중...</div>
+
+                <!-- History Section -->
+                <div class="history-section" id="historySection" style="display: none;">
+                    <h3>최근 재생</h3>
+                    <div id="historyList"></div>
+                </div>
+            </div>
+
+            <!-- Video Player -->
+            <div class="player-container">
+                <div class="video-wrapper">
+                    <video id="videoPlayer" controls>
+                        <source id="videoSource" src="" type="video/mp4">
+                        브라우저가 비디오 태그를 지원하지 않습니다.
+                    </video>
+                </div>
+
+                <div class="controls">
+                    <button class="control-btn" onclick="skipBackward()">⏪ 10초 뒤로</button>
+                    <button class="control-btn" onclick="skipForward()">⏩ 10초 앞으로</button>
+                    <button class="control-btn" onclick="toggleFullscreen()">🖥️ 전체화면</button>
+                    <button class="control-btn" onclick="togglePlayPause()">⏯️ 재생/일시정지</button>
+                    <button class="control-btn" id="transcodeBtn" onclick="toggleTranscode()" style="background: #ffc107; color: #333;">📱 트랜스코딩: OFF</button>
+                </div>
+
+                <div class="speed-controls">
+                    <button class="speed-btn" onclick="setPlaybackSpeed(0.5)">0.5x</button>
+                    <button class="speed-btn" onclick="setPlaybackSpeed(0.75)">0.75x</button>
+                    <button class="speed-btn active" onclick="setPlaybackSpeed(1)">1x</button>
+                    <button class="speed-btn" onclick="setPlaybackSpeed(1.25)">1.25x</button>
+                    <button class="speed-btn" onclick="setPlaybackSpeed(1.5)">1.5x</button>
+                    <button class="speed-btn" onclick="setPlaybackSpeed(2)">2x</button>
+                </div>
+
+                <div class="info-panel" id="infoPanel" style="display: none;">
+                    <h3>현재 재생 중</h3>
+                    <p id="currentVideoName"></p>
+                    <p id="currentVideoInfo"></p>
+                    <div class="codec-warning" id="codecWarning">
+                        <strong>⚠️ 코덱 호환성 안내</strong>
+                        일부 영상 형식은 브라우저에서 지원하지 않을 수 있습니다.
+                        아이폰이나 일부 기기에서 재생되지 않는 경우 <strong>"트랜스코딩" 버튼을 활성화</strong>하면
+                        iOS 호환 형식(H.264 + AAC)으로 실시간 변환되어 재생됩니다.
+                        또는 Chrome, Edge, Firefox 최신 버전을 사용하거나 VLC 등의 외부 플레이어를 이용하세요.
+                    </div>
+                </div>
+
+                <div class="keyboard-shortcuts">
+                    <h3>⌨️ 키보드 단축키</h3>
+                    <ul>
+                        <li><kbd>Space</kbd> 재생/일시정지</li>
+                        <li><kbd>←</kbd> 10초 뒤로</li>
+                        <li><kbd>→</kbd> 10초 앞으로</li>
+                        <li><kbd>F</kbd> 전체화면</li>
+                        <li><kbd>M</kbd> 음소거</li>
+                        <li><kbd>↑</kbd> 볼륨 올리기</li>
+                        <li><kbd>↓</kbd> 볼륨 내리기</li>
+                    </ul>
+                </div>
+
+                <!-- 구간 편집 섹션 -->
+                <div class="edit-section" id="editSection" style="display: none;">
+                    <h3>✂️ 구간 삭제 편집</h3>
+                    <div class="edit-controls">
+                        <button class="edit-btn" id="markStartBtn" onclick="markSegmentStart()">📍 시작점 마크</button>
+                        <button class="edit-btn" id="markEndBtn" onclick="markSegmentEnd()" disabled>📍 끝점 마크</button>
+                        <button class="edit-btn" id="executeEditBtn" onclick="executeEdit()" disabled>🎬 편집 실행</button>
+                    </div>
+                    <div id="segmentList" class="segment-list"></div>
+                    <p style="font-size: 0.85em; color: #666; margin-top: 10px;">
+                        💡 삭제할 구간의 시작점과 끝점을 순서대로 마크하세요. 여러 구간을 추가할 수 있습니다.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 진행 상황 오버레이 -->
+    <div class="progress-overlay" id="progressOverlay">
+        <div class="progress-content">
+            <h2>영상 편집 중...</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="progressText">처리 중입니다...</p>
+        </div>
+    </div>
+
+    <script>
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSource = document.getElementById('videoSource');
+        let currentVideo = null;
+        let videos = [];
+        let transcodeEnabled = false;  // 트랜스코딩 활성화 상태
+        let folders = [];  // 폴더 목록
+        let selectedFolders = new Set();  // 선택된 폴더들
+
+        // 구간 편집 관련 변수
+        let editSegments = [];  // 삭제할 구간들 [{start: 0, end: 10}, ...]
+        let currentSegmentStart = null;  // 현재 마킹 중인 구간의 시작점
+
+        // 브라우저가 지원하지 않을 수 있는 확장자 목록
+        const LEGACY_FORMATS = ['.rm', '.rmvb', '.vob', '.dat', '.mod', '.tod', '.mxf', '.divx', '.flv', '.wmv', '.asf'];
+
+        // 페이지 로드 시 영상 목록 불러오기
+        window.addEventListener('load', () => {
+            loadFolders();
+            loadHistory();
+            setupKeyboardShortcuts();
+            setupVideoErrorHandler();
+        });
+
+        // 비디오 오류 핸들러 설정
+        function setupVideoErrorHandler() {
+            videoPlayer.addEventListener('error', (e) => {
+                console.error('Video error:', e);
+                const warning = document.getElementById('codecWarning');
+                if (warning) {
+                    warning.style.display = 'block';
+                }
+            });
+
+            videoPlayer.addEventListener('loadeddata', () => {
+                const warning = document.getElementById('codecWarning');
+                if (warning && currentVideo) {
+                    // 레거시 형식인 경우 경고 표시
+                    const ext = currentVideo.substring(currentVideo.lastIndexOf('.')).toLowerCase();
+                    if (LEGACY_FORMATS.includes(ext)) {
+                        warning.style.display = 'block';
+                    } else {
+                        warning.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+        // 폴더 목록 불러오기
+        async function loadFolders() {
+            try {
+                const response = await fetch('/api/folders');
+                folders = await response.json();
+
+                // 모든 폴더를 기본적으로 선택
+                folders.forEach(folder => selectedFolders.add(folder.name));
+
+                displayFolders();
+                loadVideos();
+            } catch (error) {
+                document.getElementById('folderList').innerHTML =
+                    '<div class="error" style="font-size: 0.85em;">폴더 목록을 불러오는데 실패했습니다.</div>';
+                console.error('Error loading folders:', error);
+            }
+        }
+
+        // 폴더 목록 표시
+        function displayFolders() {
+            const container = document.getElementById('folderList');
+
+            if (folders.length === 0) {
+                container.innerHTML = '<p style="color: #999; font-size: 0.85em;">설정된 폴더가 없습니다.</p>';
+                return;
+            }
+
+            container.innerHTML = folders.map(folder => `
+                <div class="folder-checkbox">
+                    <input type="checkbox"
+                           id="folder_${folder.name}"
+                           ${selectedFolders.has(folder.name) ? 'checked' : ''}
+                           onchange="toggleFolder('${folder.name}')">
+                    <label for="folder_${folder.name}">${folder.name}</label>
+                    <span class="folder-count">${folder.count}</span>
+                </div>
+            `).join('');
+        }
+
+        // 폴더 선택/해제
+        function toggleFolder(folderName) {
+            if (selectedFolders.has(folderName)) {
+                selectedFolders.delete(folderName);
+            } else {
+                selectedFolders.add(folderName);
+            }
+            loadVideos();
+        }
+
+        // 전체 폴더 선택/해제
+        function toggleAllFolders() {
+            if (selectedFolders.size === folders.length) {
+                // 모두 선택되어 있으면 전체 해제
+                selectedFolders.clear();
+            } else {
+                // 일부만 선택되어 있거나 없으면 전체 선택
+                folders.forEach(folder => selectedFolders.add(folder.name));
+            }
+            displayFolders();
+            loadVideos();
+        }
+
+        // 영상 목록 불러오기
+        async function loadVideos() {
+            try {
+                // 선택된 폴더들을 쿼리 파라미터로 전달
+                const foldersParam = Array.from(selectedFolders).join(',');
+                const url = foldersParam ? `/api/videos?folders=${encodeURIComponent(foldersParam)}` : '/api/videos';
+
+                const response = await fetch(url);
+                videos = await response.json();
+                displayVideos(videos);
+            } catch (error) {
+                document.getElementById('videoList').innerHTML =
+                    '<div class="error">영상 목록을 불러오는데 실패했습니다.</div>';
+                console.error('Error loading videos:', error);
+            }
+        }
+
+        // 영상 목록 표시
+        function displayVideos(videoList) {
+            const container = document.getElementById('videoList');
+
+            if (videoList.length === 0) {
+                container.innerHTML = '<div class="no-video">영상 파일이 없습니다.<br>videos 폴더에 영상을 추가해주세요.</div>';
+                return;
+            }
+
+            container.innerHTML = videoList.map(video => `
+                <div class="video-item" onclick="playVideo('${video.name}')">
+                    <div class="video-item-name">${video.name}</div>
+                    <div class="video-item-info">
+                        폴더: ${video.folder || 'Unknown'}<br>
+                        크기: ${formatFileSize(video.size)}<br>
+                        수정일: ${formatDate(video.modified)}
+                    </div>
+                    <button class="delete-btn" onclick="deleteVideo('${video.name}', event)">삭제</button>
+                </div>
+            `).join('');
+        }
+
+        // 영상 재생
+        function playVideo(filename) {
+            currentVideo = filename;
+
+            // 트랜스코딩 활성화 여부에 따라 엔드포인트 선택
+            const endpoint = transcodeEnabled
+                ? `/api/transcode/${encodeURIComponent(filename)}`
+                : `/api/video/${encodeURIComponent(filename)}`;
+
+            videoSource.src = endpoint;
+            videoPlayer.load();
+            videoPlayer.play();
+
+            // 활성 상태 표시
+            document.querySelectorAll('.video-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+
+            // 정보 패널 업데이트
+            const video = videos.find(v => v.name === filename);
+            if (video) {
+                document.getElementById('infoPanel').style.display = 'block';
+                document.getElementById('currentVideoName').textContent = filename;
+
+                const transcodeInfo = transcodeEnabled ? ' | 📱 트랜스코딩 중 (iOS 호환)' : '';
+                document.getElementById('currentVideoInfo').textContent =
+                    `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${transcodeInfo}`;
+            }
+
+            // 구간 편집 섹션 표시 및 초기화
+            document.getElementById('editSection').style.display = 'block';
+            resetEditState();
+
+            // 재생 기록 저장
+            saveToHistory(filename);
+        }
+
+        // 영상 삭제
+        async function deleteVideo(filename, event) {
+            event.stopPropagation();
+
+            try {
+                const response = await fetch(`/api/delete/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 현재 재생 중인 영상이면 먼저 정지
+                    if (currentVideo === filename) {
+                        videoPlayer.pause();
+                        videoSource.src = '';
+                        currentVideo = null;
+                        document.getElementById('infoPanel').style.display = 'none';
+                    }
+
+                    // 목록 새로고침 (await로 확실하게 완료 대기)
+                    await loadVideos();
+                    await loadHistory();
+
+                    alert('영상이 삭제되었습니다.');
+                } else {
+                    alert('삭제 실패: ' + result.error);
+                }
+            } catch (error) {
+                alert('삭제 중 오류가 발생했습니다.');
+                console.error('Error deleting video:', error);
+            }
+        }
+
+        // 10초 뒤로
+        function skipBackward() {
+            videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 10);
+        }
+
+        // 10초 앞으로
+        function skipForward() {
+            videoPlayer.currentTime = Math.min(videoPlayer.duration, videoPlayer.currentTime + 10);
+        }
+
+        // 전체화면 토글
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                videoPlayer.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 재생/일시정지 토글
+        function togglePlayPause() {
+            if (videoPlayer.paused) {
+                videoPlayer.play();
+            } else {
+                videoPlayer.pause();
+            }
+        }
+
+        // 재생 속도 설정
+        function setPlaybackSpeed(speed) {
+            videoPlayer.playbackRate = speed;
+
+            // 활성 버튼 표시
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+        }
+
+        // 트랜스코딩 토글
+        function toggleTranscode() {
+            transcodeEnabled = !transcodeEnabled;
+            const btn = document.getElementById('transcodeBtn');
+
+            if (transcodeEnabled) {
+                btn.textContent = '📱 트랜스코딩: ON';
+                btn.style.background = '#28a745';
+                btn.style.color = 'white';
+            } else {
+                btn.textContent = '📱 트랜스코딩: OFF';
+                btn.style.background = '#ffc107';
+                btn.style.color = '#333';
+            }
+
+            // 현재 재생 중인 영상이 있으면 다시 로드
+            if (currentVideo) {
+                const currentTime = videoPlayer.currentTime;
+                const wasPlaying = !videoPlayer.paused;
+
+                const endpoint = transcodeEnabled
+                    ? `/api/transcode/${encodeURIComponent(currentVideo)}`
+                    : `/api/video/${encodeURIComponent(currentVideo)}`;
+
+                videoSource.src = endpoint;
+                videoPlayer.load();
+
+                // 이전 재생 위치로 복귀
+                videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                    videoPlayer.currentTime = currentTime;
+                    if (wasPlaying) {
+                        videoPlayer.play();
+                    }
+                    videoPlayer.removeEventListener('loadedmetadata', onLoad);
+                });
+
+                // 정보 패널 업데이트
+                const video = videos.find(v => v.name === currentVideo);
+                if (video) {
+                    const transcodeInfo = transcodeEnabled ? ' | 📱 트랜스코딩 중 (iOS 호환)' : '';
+                    document.getElementById('currentVideoInfo').textContent =
+                        `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${transcodeInfo}`;
+                }
+            }
+        }
+
+        // 키보드 단축키 설정
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                // 입력 필드에서는 단축키 무시
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+
+                switch(e.key) {
+                    case ' ':
+                        e.preventDefault();
+                        togglePlayPause();
+                        break;
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        skipBackward();
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        skipForward();
+                        break;
+                    case 'f':
+                    case 'F':
+                        e.preventDefault();
+                        toggleFullscreen();
+                        break;
+                    case 'm':
+                    case 'M':
+                        e.preventDefault();
+                        videoPlayer.muted = !videoPlayer.muted;
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        videoPlayer.volume = Math.min(1, videoPlayer.volume + 0.1);
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        videoPlayer.volume = Math.max(0, videoPlayer.volume - 0.1);
+                        break;
+                }
+            });
+        }
+
+        // 재생 기록 저장
+        async function saveToHistory(filename) {
+            try {
+                await fetch('/api/history', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: filename,
+                        position: videoPlayer.currentTime
+                    })
+                });
+                loadHistory();
+            } catch (error) {
+                console.error('Error saving history:', error);
+            }
+        }
+
+        // 재생 기록 불러오기
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const history = await response.json();
+
+                if (history.length > 0) {
+                    document.getElementById('historySection').style.display = 'block';
+                    document.getElementById('historyList').innerHTML = history.slice(0, 5).map(item => `
+                        <div class="history-item" onclick="playVideo('${item.filename}')">
+                            ${item.filename}
+                            <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                                ${formatDate(item.timestamp)}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    // 히스토리가 비어있으면 섹션 숨기기
+                    document.getElementById('historySection').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        // 파일 크기 포맷
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // 날짜 포맷
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('ko-KR');
+        }
+
+        // 영상 재생 위치 저장 (5초마다)
+        setInterval(() => {
+            if (currentVideo && !videoPlayer.paused) {
+                saveToHistory(currentVideo);
+            }
+        }, 5000);
+
+        // ==================== 구간 편집 기능 ====================
+
+        // 편집 상태 초기화
+        function resetEditState() {
+            editSegments = [];
+            currentSegmentStart = null;
+            updateSegmentList();
+            document.getElementById('markStartBtn').disabled = false;
+            document.getElementById('markEndBtn').disabled = true;
+            document.getElementById('executeEditBtn').disabled = true;
+        }
+
+        // 시간을 포맷팅 (초 -> MM:SS)
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // 구간 시작점 마크
+        function markSegmentStart() {
+            if (!currentVideo) {
+                alert('영상을 먼저 선택해주세요.');
+                return;
+            }
+
+            currentSegmentStart = videoPlayer.currentTime;
+            document.getElementById('markStartBtn').disabled = true;
+            document.getElementById('markEndBtn').disabled = false;
+            alert(`시작점이 ${formatTime(currentSegmentStart)}에 마크되었습니다.`);
+        }
+
+        // 구간 끝점 마크
+        function markSegmentEnd() {
+            if (currentSegmentStart === null) {
+                alert('시작점을 먼저 마크해주세요.');
+                return;
+            }
+
+            const end = videoPlayer.currentTime;
+
+            if (end <= currentSegmentStart) {
+                alert('끝점은 시작점보다 뒤에 있어야 합니다.');
+                return;
+            }
+
+            // 구간 추가
+            editSegments.push({
+                start: currentSegmentStart,
+                end: end
+            });
+
+            // 정렬 (시작 시간 기준)
+            editSegments.sort((a, b) => a.start - b.start);
+
+            // UI 업데이트
+            updateSegmentList();
+            currentSegmentStart = null;
+            document.getElementById('markStartBtn').disabled = false;
+            document.getElementById('markEndBtn').disabled = true;
+            document.getElementById('executeEditBtn').disabled = false;
+
+            alert(`구간 ${formatTime(editSegments[editSegments.length - 1].start)} - ${formatTime(end)}이 추가되었습니다.`);
+        }
+
+        // 구간 리스트 UI 업데이트
+        function updateSegmentList() {
+            const listElement = document.getElementById('segmentList');
+
+            if (editSegments.length === 0) {
+                listElement.innerHTML = '<p style="color: #999; font-size: 0.9em;">삭제할 구간이 없습니다.</p>';
+                return;
+            }
+
+            listElement.innerHTML = editSegments.map((segment, index) => `
+                <div class="segment-item">
+                    <span>구간 ${index + 1}: ${formatTime(segment.start)} - ${formatTime(segment.end)}</span>
+                    <button class="segment-remove" onclick="removeSegment(${index})">삭제</button>
+                </div>
+            `).join('');
+        }
+
+        // 구간 제거
+        function removeSegment(index) {
+            editSegments.splice(index, 1);
+            updateSegmentList();
+
+            if (editSegments.length === 0) {
+                document.getElementById('executeEditBtn').disabled = true;
+            }
+        }
+
+        // 편집 실행
+        async function executeEdit() {
+            if (!currentVideo || editSegments.length === 0) {
+                alert('영상과 삭제할 구간을 확인해주세요.');
+                return;
+            }
+
+            if (!confirm(`${editSegments.length}개 구간을 삭제하여 새로운 영상을 생성하시겠습니까?\n\n원본 파일은 유지됩니다.`)) {
+                return;
+            }
+
+            // 진행 상황 오버레이 표시
+            const overlay = document.getElementById('progressOverlay');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            overlay.style.display = 'flex';
+            progressFill.style.width = '0%';
+            progressText.textContent = '편집 작업을 시작합니다...';
+
+            try {
+                const response = await fetch('/api/edit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: currentVideo,
+                        segments: editSegments
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('편집 요청 실패');
+                }
+
+                const data = await response.json();
+
+                if (data.task_id) {
+                    // 진행 상황 폴링
+                    checkEditProgress(data.task_id);
+                } else {
+                    throw new Error('작업 ID를 받지 못했습니다.');
+                }
+
+            } catch (error) {
+                overlay.style.display = 'none';
+                alert('편집 중 오류가 발생했습니다: ' + error.message);
+                console.error('Edit error:', error);
+            }
+        }
+
+        // 편집 진행 상황 확인
+        async function checkEditProgress(taskId) {
+            const overlay = document.getElementById('progressOverlay');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/edit/status/${taskId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'processing') {
+                        const progress = data.progress || 0;
+                        progressFill.style.width = `${progress}%`;
+                        progressText.textContent = `편집 중... ${Math.round(progress)}%`;
+                    } else if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        progressFill.style.width = '100%';
+                        progressText.textContent = '편집 완료!';
+
+                        setTimeout(() => {
+                            overlay.style.display = 'none';
+                            alert(`편집이 완료되었습니다!\n\n새 파일: ${data.output_file}`);
+                            resetEditState();
+                            loadVideos();  // 영상 목록 새로고침
+                        }, 1000);
+                    } else if (data.status === 'error') {
+                        clearInterval(pollInterval);
+                        overlay.style.display = 'none';
+                        alert('편집 중 오류가 발생했습니다: ' + data.error);
+                    }
+                } catch (error) {
+                    clearInterval(pollInterval);
+                    overlay.style.display = 'none';
+                    alert('진행 상황 확인 중 오류가 발생했습니다.');
+                    console.error('Progress check error:', error);
+                }
+            }, 1000);  // 1초마다 확인
+        }
+    </script>
+</body>
+</html>
