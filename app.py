@@ -4,11 +4,13 @@ import subprocess
 import threading
 import uuid
 import time
+import shutil
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, send_file, Response, stream_with_context
 from urllib.parse import unquote
 import mimetypes
-from datetime import datetime
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 5000 * 1024 * 1024  # 5GB max file size
@@ -32,6 +34,16 @@ def get_video_folders():
     """영상 폴더 목록 가져오기"""
     config = load_config()
     return config.get('video_folders', [])
+
+def get_cache_settings():
+    """캐시 설정 가져오기"""
+    config = load_config()
+    default_settings = {
+        'max_age_days': 7,
+        'max_size_gb': 50,
+        'cleanup_interval_hours': 24
+    }
+    return config.get('cache_settings', default_settings)
 
 # 지원하는 영상 파일 확장자 (광범위한 코덱 지원)
 VIDEO_EXTENSIONS = {
@@ -297,6 +309,87 @@ def serve_video(filename):
     return response
 
 
+@app.route('/api/hls/<path:filename>/playlist.m3u8')
+def hls_playlist(filename):
+    """HLS 플레이리스트 제공 (iOS 최적화)"""
+    video_path = find_video_path(filename)
+
+    if not video_path:
+        return jsonify({'error': 'Video not found'}), 404
+
+    # HLS 캐시 디렉토리
+    hls_dir = os.path.join(os.path.dirname(__file__), 'static', 'hls')
+    os.makedirs(hls_dir, exist_ok=True)
+
+    # 파일명에서 안전한 디렉토리명 생성
+    name, ext = os.path.splitext(filename)
+    safe_name = "".join(c if c.isalnum() or c in ('_', '-') else '_' for c in name)
+    video_hls_dir = os.path.join(hls_dir, safe_name)
+    os.makedirs(video_hls_dir, exist_ok=True)
+
+    playlist_path = os.path.join(video_hls_dir, 'playlist.m3u8')
+
+    # HLS 파일이 없거나 원본보다 오래된 경우 생성
+    if not os.path.exists(playlist_path) or os.path.getmtime(video_path) > os.path.getmtime(playlist_path):
+        # FFmpeg로 HLS 생성 (iOS 호환)
+        ffmpeg_cmd = [
+            'ffmpeg', '-y',
+            '-i', video_path,
+            '-c:v', 'libx264',              # H.264 비디오
+            '-profile:v', 'baseline',        # iOS 호환 프로필
+            '-level', '3.0',                 # iOS 호환 레벨
+            '-preset', 'fast',               # 빠른 인코딩
+            '-crf', '23',                    # 품질
+            '-maxrate', '3M',                # 최대 비트레이트
+            '-bufsize', '6M',                # 버퍼 크기
+            '-pix_fmt', 'yuv420p',           # iOS 필수
+            '-c:a', 'aac',                   # AAC 오디오
+            '-b:a', '128k',
+            '-ar', '44100',
+            '-hls_time', '6',                # 세그먼트 길이 (6초)
+            '-hls_list_size', '0',           # 모든 세그먼트 목록에 포함
+            '-hls_segment_type', 'mpegts',   # MPEG-TS 세그먼트
+            '-hls_segment_filename', os.path.join(video_hls_dir, 'segment_%03d.ts'),
+            '-f', 'hls',
+            playlist_path
+        ]
+
+        try:
+            subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                check=True,
+                timeout=600
+            )
+        except subprocess.CalledProcessError as e:
+            return jsonify({
+                'error': 'HLS generation failed',
+                'details': e.stderr.decode('utf-8') if e.stderr else 'Unknown error'
+            }), 500
+        except subprocess.TimeoutExpired:
+            return jsonify({'error': 'HLS generation timeout'}), 500
+
+    # 플레이리스트 파일 제공
+    return send_file(playlist_path, mimetype='application/vnd.apple.mpegurl')
+
+
+@app.route('/api/hls/<path:filename>/<segment_name>')
+def hls_segment(filename, segment_name):
+    """HLS 세그먼트 파일 제공"""
+    # 파일명에서 안전한 디렉토리명 생성
+    name, ext = os.path.splitext(filename)
+    safe_name = "".join(c if c.isalnum() or c in ('_', '-') else '_' for c in name)
+
+    hls_dir = os.path.join(os.path.dirname(__file__), 'static', 'hls')
+    video_hls_dir = os.path.join(hls_dir, safe_name)
+    segment_path = os.path.join(video_hls_dir, segment_name)
+
+    if not os.path.exists(segment_path):
+        return jsonify({'error': 'Segment not found'}), 404
+
+    return send_file(segment_path, mimetype='video/mp2t')
+
+
 @app.route('/api/transcode/<path:filename>')
 def transcode_video(filename):
     """트랜스코딩 스트리밍 (iOS 호환 - 캐시 기반)"""
@@ -399,14 +492,23 @@ def delete_video(filename):
         # 원본 파일 삭제
         os.remove(video_path)
 
+        name, ext = os.path.splitext(filename)
+
         # 트랜스코딩된 캐시 파일도 삭제
         cache_dir = os.path.join(os.path.dirname(__file__), 'static', 'transcoded')
-        name, ext = os.path.splitext(filename)
         cache_filename = f"{name}_transcoded.mp4"
         cache_path = os.path.join(cache_dir, cache_filename)
 
         if os.path.exists(cache_path):
             os.remove(cache_path)
+
+        # HLS 캐시 디렉토리도 삭제
+        hls_dir = os.path.join(os.path.dirname(__file__), 'static', 'hls')
+        safe_name = "".join(c if c.isalnum() or c in ('_', '-') else '_' for c in name)
+        video_hls_dir = os.path.join(hls_dir, safe_name)
+
+        if os.path.exists(video_hls_dir):
+            shutil.rmtree(video_hls_dir)
 
         # 히스토리에서도 제거
         decoded_filename = unquote(filename)
@@ -417,6 +519,120 @@ def delete_video(filename):
         return jsonify({'success': True, 'message': 'Video deleted successfully'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def get_directory_size(directory):
+    """디렉토리의 총 크기 계산 (바이트)"""
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(directory):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                if os.path.exists(filepath):
+                    total_size += os.path.getsize(filepath)
+    except Exception as e:
+        print(f"Error calculating directory size: {e}")
+    return total_size
+
+
+def cleanup_old_cache():
+    """오래된 캐시 파일 자동 정리"""
+    try:
+        settings = get_cache_settings()
+        max_age_days = settings['max_age_days']
+        max_size_gb = settings['max_size_gb']
+
+        cache_dirs = [
+            os.path.join(os.path.dirname(__file__), 'static', 'transcoded'),
+            os.path.join(os.path.dirname(__file__), 'static', 'hls')
+        ]
+
+        now = time.time()
+        max_age_seconds = max_age_days * 24 * 60 * 60
+        deleted_count = 0
+        freed_space = 0
+
+        for cache_dir in cache_dirs:
+            if not os.path.exists(cache_dir):
+                continue
+
+            # 오래된 파일 삭제 (접근 시간 기준)
+            for item in os.listdir(cache_dir):
+                item_path = os.path.join(cache_dir, item)
+
+                try:
+                    # 파일 또는 디렉토리의 마지막 접근 시간
+                    atime = os.path.getatime(item_path)
+                    age_seconds = now - atime
+
+                    if age_seconds > max_age_seconds:
+                        item_size = 0
+                        if os.path.isdir(item_path):
+                            item_size = get_directory_size(item_path)
+                            shutil.rmtree(item_path)
+                        else:
+                            item_size = os.path.getsize(item_path)
+                            os.remove(item_path)
+
+                        deleted_count += 1
+                        freed_space += item_size
+                        print(f"Deleted old cache: {item_path}")
+                except Exception as e:
+                    print(f"Error deleting {item_path}: {e}")
+
+        # 전체 캐시 크기 확인 및 용량 제한
+        total_cache_size = sum(get_directory_size(d) for d in cache_dirs if os.path.exists(d))
+        max_size_bytes = max_size_gb * 1024 * 1024 * 1024
+
+        if total_cache_size > max_size_bytes:
+            # LRU (Least Recently Used) 방식으로 삭제
+            all_cache_items = []
+
+            for cache_dir in cache_dirs:
+                if not os.path.exists(cache_dir):
+                    continue
+
+                for item in os.listdir(cache_dir):
+                    item_path = os.path.join(cache_dir, item)
+                    try:
+                        atime = os.path.getatime(item_path)
+                        if os.path.isdir(item_path):
+                            size = get_directory_size(item_path)
+                        else:
+                            size = os.path.getsize(item_path)
+                        all_cache_items.append((item_path, atime, size))
+                    except:
+                        pass
+
+            # 접근 시간 순으로 정렬 (오래된 것부터)
+            all_cache_items.sort(key=lambda x: x[1])
+
+            # 용량이 제한 이하가 될 때까지 삭제
+            current_size = total_cache_size
+            for item_path, _, item_size in all_cache_items:
+                if current_size <= max_size_bytes:
+                    break
+
+                try:
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                    else:
+                        os.remove(item_path)
+
+                    current_size -= item_size
+                    deleted_count += 1
+                    freed_space += item_size
+                    print(f"Deleted cache (size limit): {item_path}")
+                except Exception as e:
+                    print(f"Error deleting {item_path}: {e}")
+
+        if deleted_count > 0:
+            print(f"Cache cleanup completed: {deleted_count} items deleted, {freed_space / (1024*1024):.2f} MB freed")
+        else:
+            print("Cache cleanup: No old files to delete")
+
+    except Exception as e:
+        print(f"Error during cache cleanup: {e}")
 
 
 @app.route('/api/history', methods=['GET', 'POST'])
@@ -495,16 +711,26 @@ def process_video_edit(task_id, video_path, segments, output_path):
         temp_dir = os.path.dirname(output_path)
 
         for i, segment in enumerate(keep_segments):
+            # 각 구간 추출
+            segment_duration = max(segment['end'] - segment['start'], 0)
+            if segment_duration <= 0:
+                continue
+
             temp_file = os.path.join(temp_dir, f"temp_segment_{i}_{task_id}.mp4")
             temp_files.append(temp_file)
 
-            # 각 구간 추출
             cmd = [
                 'ffmpeg', '-y',
-                '-i', video_path,
                 '-ss', str(segment['start']),
-                '-to', str(segment['end']),
-                '-c', 'copy',
+                '-i', video_path,
+                '-t', str(segment_duration),
+                '-c:v', 'libx264',
+                '-preset', 'fast',
+                '-crf', '20',
+                '-pix_fmt', 'yuv420p',
+                '-force_key_frames', '0',
+                '-c:a', 'copy',
+                '-movflags', '+faststart',
                 temp_file
             ]
 
@@ -610,5 +836,36 @@ def get_edit_status(task_id):
     return jsonify(edit_tasks[task_id])
 
 
+# 캐시 자동 정리 스케줄러 설정
+scheduler = BackgroundScheduler()
+settings = get_cache_settings()
+cleanup_interval_hours = settings['cleanup_interval_hours']
+
+# 정리 작업 스케줄 (설정된 간격마다 실행)
+scheduler.add_job(
+    func=cleanup_old_cache,
+    trigger='interval',
+    hours=cleanup_interval_hours,
+    id='cache_cleanup',
+    name='Automatic cache cleanup',
+    replace_existing=True
+)
+
+# 서버 시작 시 한 번 실행
+scheduler.add_job(
+    func=cleanup_old_cache,
+    trigger='date',
+    id='cache_cleanup_startup',
+    name='Cache cleanup on startup',
+    replace_existing=True
+)
+
+scheduler.start()
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
+    try:
+        print(f"🗑️  캐시 자동 정리: {cleanup_interval_hours}시간마다 실행 (최대 {settings['max_age_days']}일, {settings['max_size_gb']}GB)")
+        app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
