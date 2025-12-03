@@ -5,6 +5,7 @@ import threading
 import uuid
 import time
 import shutil
+import platform
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, send_file, Response, stream_with_context
 from urllib.parse import unquote
@@ -15,10 +16,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 5000 * 1024 * 1024  # 5GB max file size
 
+MIN_SEGMENT_DURATION = 0.05  # seconds; ignore shorter leftovers to avoid zero-length cuts
+
 # 설정
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 THUMBNAILS_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'thumbnails')
 HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'history.json')
+media_info_cache = {}
 
 def load_config():
     """설정 파일 로드"""
@@ -163,6 +167,72 @@ def get_mime_type(filename):
     return MIME_TYPES.get(ext) or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
 
+def get_media_info(file_path):
+    """영상 코덱/해상도 등의 메타데이터 추출 (ffprobe 결과를 캐시)"""
+    try:
+        mtime = os.path.getmtime(file_path)
+    except OSError:
+        return {}
+
+    cache_entry = media_info_cache.get(file_path)
+    if cache_entry and cache_entry['mtime'] == mtime:
+        return cache_entry['data']
+
+    cmd = [
+        'ffprobe', '-v', 'error',
+        '-show_entries',
+        'format=bit_rate:stream=index,codec_type,codec_name,codec_long_name,width,height,bit_rate,channels,channel_layout',
+        '-of', 'json',
+        file_path
+    ]
+
+    metadata = {}
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        info = json.loads(result.stdout)
+        streams = info.get('streams', [])
+        format_info = info.get('format', {})
+
+        def parse_bit_rate(value):
+            if isinstance(value, (int, float)):
+                return int(value)
+            if isinstance(value, str):
+                try:
+                    return int(float(value))
+                except ValueError:
+                    return None
+            return None
+
+        metadata['bitrate'] = parse_bit_rate(format_info.get('bit_rate'))
+
+        video_stream = next((s for s in streams if s.get('codec_type') == 'video'), None)
+        if video_stream:
+            codec = video_stream.get('codec_name') or video_stream.get('codec_long_name')
+            width = video_stream.get('width')
+            height = video_stream.get('height')
+            resolution = f"{width}x{height}" if width and height else None
+            if codec:
+                codec_label = codec.upper() if len(codec) <= 6 else codec
+                metadata['video_codec_info'] = f"{codec_label} ({resolution})" if resolution else codec_label
+
+        audio_stream = next((s for s in streams if s.get('codec_type') == 'audio'), None)
+        if audio_stream:
+            codec = audio_stream.get('codec_name') or audio_stream.get('codec_long_name')
+            channel_layout = audio_stream.get('channel_layout')
+            channels = audio_stream.get('channels')
+            channel_desc = channel_layout or (f"{channels}ch" if channels else None)
+            if codec:
+                codec_label = codec.upper() if len(codec) <= 6 else codec
+                metadata['audio_codec_info'] = f"{codec_label} ({channel_desc})" if channel_desc else codec_label
+
+    except Exception:
+        metadata = {}
+
+    media_info_cache[file_path] = {'mtime': mtime, 'data': metadata}
+    return metadata
+
+
 def get_video_files(folder_filter=None):
     """영상 파일 목록 가져오기
 
@@ -189,13 +259,15 @@ def get_video_files(folder_filter=None):
                 ext = os.path.splitext(file)[1].lower()
                 if ext in VIDEO_EXTENSIONS:
                     stat = os.stat(file_path)
+                    media_info = get_media_info(file_path)
                     video_files.append({
                         'name': file,
                         'path': file,
                         'folder': folder_name,
                         'size': stat.st_size,
                         'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                        'extension': ext
+                        'extension': ext,
+                        **media_info
                     })
 
     # 수정 날짜 기준 정렬
@@ -677,6 +749,34 @@ def get_thumbnail(filename):
     return jsonify({'error': 'Thumbnail not found'}), 404
 
 
+def get_edit_codec_args():
+    """편집 시 사용할 비디오 코덱 인코딩 옵션 (맥은 GPU 활용)"""
+    if platform.system() == 'Darwin':
+        primary = [
+            '-c:v', 'hevc_videotoolbox',
+            '-tag:v', 'hvc1',
+            '-b:v', '5M',
+            '-maxrate', '6M',
+            '-bufsize', '12M',
+            '-pix_fmt', 'yuv420p'
+        ]
+        fallback = [
+            '-c:v', 'libx265',
+            '-preset', 'medium',
+            '-crf', '22',
+            '-pix_fmt', 'yuv420p'
+        ]
+        return primary, fallback
+
+    primary = [
+        '-c:v', 'libx265',
+        '-preset', 'medium',
+        '-crf', '22',
+        '-pix_fmt', 'yuv420p'
+    ]
+    return primary, None
+
+
 def process_video_edit(task_id, video_path, segments, output_path):
     """백그라운드에서 영상 편집 처리"""
     try:
@@ -710,31 +810,45 @@ def process_video_edit(task_id, video_path, segments, output_path):
         temp_files = []
         temp_dir = os.path.dirname(output_path)
 
+        codec_args, fallback_codec_args = get_edit_codec_args()
+
         for i, segment in enumerate(keep_segments):
             # 각 구간 추출
-            segment_duration = max(segment['end'] - segment['start'], 0)
+            segment_duration = segment['end'] - segment['start']
             if segment_duration <= 0:
+                continue
+            if segment_duration < MIN_SEGMENT_DURATION:
+                # FFmpeg가 처리하지 못하는 초미세 구간은 무시
                 continue
 
             temp_file = os.path.join(temp_dir, f"temp_segment_{i}_{task_id}.mp4")
             temp_files.append(temp_file)
 
-            cmd = [
+            base_cmd = [
                 'ffmpeg', '-y',
                 '-ss', str(segment['start']),
                 '-i', video_path,
-                '-t', str(segment_duration),
-                '-c:v', 'libx264',
-                '-preset', 'fast',
-                '-crf', '20',
-                '-pix_fmt', 'yuv420p',
-                '-force_key_frames', '0',
+                '-t', str(segment_duration)
+            ]
+
+            cmd = base_cmd + codec_args + [
                 '-c:a', 'copy',
                 '-movflags', '+faststart',
                 temp_file
             ]
 
-            subprocess.run(cmd, capture_output=True, check=True)
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+            except subprocess.CalledProcessError:
+                if fallback_codec_args:
+                    fallback_cmd = base_cmd + fallback_codec_args + [
+                        '-c:a', 'copy',
+                        '-movflags', '+faststart',
+                        temp_file
+                    ]
+                    subprocess.run(fallback_cmd, capture_output=True, check=True)
+                else:
+                    raise
             edit_tasks[task_id]['progress'] = int((i + 1) / (len(keep_segments) + 1) * 90)
 
         # concat 리스트 파일 생성

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlexPlay - Flexible Video Player</title>
+    <!-- HLS.js for non-Safari browsers -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.3"></script>
     <style>
         * {
             margin: 0;
@@ -550,6 +552,7 @@
                     <button class="control-btn" onclick="skipForward()">⏩ 10초 앞으로</button>
                     <button class="control-btn" onclick="toggleFullscreen()">🖥️ 전체화면</button>
                     <button class="control-btn" onclick="togglePlayPause()">⏯️ 재생/일시정지</button>
+                    <button class="control-btn" id="hlsBtn" onclick="toggleHLS()" style="background: #28a745; color: white;">📡 HLS: OFF</button>
                     <button class="control-btn" id="transcodeBtn" onclick="toggleTranscode()" style="background: #ffc107; color: #333;">📱 트랜스코딩: OFF</button>
                 </div>
 
@@ -622,6 +625,8 @@
         let currentVideo = null;
         let videos = [];
         let transcodeEnabled = false;  // 트랜스코딩 활성화 상태
+        let hlsEnabled = false;  // HLS 스트리밍 활성화 상태
+        let hls = null;  // HLS.js 인스턴스
         let folders = [];  // 폴더 목록
         let selectedFolders = new Set();  // 선택된 폴더들
 
@@ -752,31 +757,83 @@
                 return;
             }
 
-            container.innerHTML = videoList.map(video => `
-                <div class="video-item" onclick="playVideo('${video.name}')">
-                    <div class="video-item-name">${video.name}</div>
-                    <div class="video-item-info">
-                        폴더: ${video.folder || 'Unknown'}<br>
-                        크기: ${formatFileSize(video.size)}<br>
-                        수정일: ${formatDate(video.modified)}
+            container.innerHTML = videoList.map(video => {
+                const bitrateText = formatBitrate(video.bitrate);
+                return `
+                    <div class="video-item" onclick="playVideo('${video.name}')">
+                        <div class="video-item-name">${video.name}</div>
+                        <div class="video-item-info">
+                            폴더: ${video.folder || 'Unknown'}<br>
+                            크기: ${formatFileSize(video.size)}<br>
+                            수정일: ${formatDate(video.modified)}<br>
+                            ${video.video_codec_info ? `영상 코덱: ${video.video_codec_info}<br>` : ''}
+                            ${video.audio_codec_info ? `오디오 코덱: ${video.audio_codec_info}<br>` : ''}
+                            ${bitrateText ? `총 비트레이트: ${bitrateText}` : ''}
+                        </div>
+                        <button class="delete-btn" onclick="deleteVideo('${video.name}', event)">삭제</button>
                     </div>
-                    <button class="delete-btn" onclick="deleteVideo('${video.name}', event)">삭제</button>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // 영상 재생
         function playVideo(filename) {
             currentVideo = filename;
 
-            // 트랜스코딩 활성화 여부에 따라 엔드포인트 선택
-            const endpoint = transcodeEnabled
-                ? `/api/transcode/${encodeURIComponent(filename)}`
-                : `/api/video/${encodeURIComponent(filename)}`;
+            // 기존 HLS 인스턴스 정리
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
 
-            videoSource.src = endpoint;
-            videoPlayer.load();
-            videoPlayer.play();
+            // HLS 스트리밍 사용
+            if (hlsEnabled) {
+                const hlsUrl = `/api/hls/${encodeURIComponent(filename)}/playlist.m3u8`;
+
+                // iOS Safari는 네이티브 HLS 지원
+                if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoSource.src = hlsUrl;
+                    videoPlayer.load();
+                    videoPlayer.play();
+                }
+                // 다른 브라우저는 HLS.js 사용
+                else if (Hls.isSupported()) {
+                    hls = new Hls({
+                        debug: false,
+                        enableWorker: true,
+                        lowLatencyMode: true,
+                        backBufferLength: 90
+                    });
+
+                    hls.loadSource(hlsUrl);
+                    hls.attachMedia(videoPlayer);
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        videoPlayer.play();
+                    });
+
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        console.error('HLS Error:', data);
+                        if (data.fatal) {
+                            alert('HLS 스트리밍 오류가 발생했습니다. 일반 재생 모드로 전환해주세요.');
+                        }
+                    });
+                }
+                else {
+                    alert('이 브라우저는 HLS 스트리밍을 지원하지 않습니다.');
+                    return;
+                }
+            }
+            // 일반 또는 트랜스코딩 재생
+            else {
+                const endpoint = transcodeEnabled
+                    ? `/api/transcode/${encodeURIComponent(filename)}`
+                    : `/api/video/${encodeURIComponent(filename)}`;
+
+                videoSource.src = endpoint;
+                videoPlayer.load();
+                videoPlayer.play();
+            }
 
             // 활성 상태 표시
             document.querySelectorAll('.video-item').forEach(item => {
@@ -790,9 +847,12 @@
                 document.getElementById('infoPanel').style.display = 'block';
                 document.getElementById('currentVideoName').textContent = filename;
 
-                const transcodeInfo = transcodeEnabled ? ' | 📱 트랜스코딩 중 (iOS 호환)' : '';
+                let modeInfo = '';
+                if (hlsEnabled) modeInfo = ' | 📡 HLS 스트리밍 (iOS 최적화)';
+                else if (transcodeEnabled) modeInfo = ' | 📱 트랜스코딩 중 (iOS 호환)';
+
                 document.getElementById('currentVideoInfo').textContent =
-                    `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${transcodeInfo}`;
+                    `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${modeInfo}`;
             }
 
             // 구간 편집 섹션 표시 및 초기화
@@ -876,14 +936,51 @@
             event.currentTarget.classList.add('active');
         }
 
+        // HLS 스트리밍 토글
+        function toggleHLS() {
+            hlsEnabled = !hlsEnabled;
+            const btn = document.getElementById('hlsBtn');
+
+            if (hlsEnabled) {
+                // HLS ON이면 트랜스코딩 OFF
+                transcodeEnabled = false;
+                document.getElementById('transcodeBtn').textContent = '📱 트랜스코딩: OFF';
+                document.getElementById('transcodeBtn').style.background = '#ffc107';
+                document.getElementById('transcodeBtn').style.color = '#333';
+
+                btn.textContent = '📡 HLS: ON';
+                btn.style.background = '#007bff';
+                btn.style.color = 'white';
+            } else {
+                btn.textContent = '📡 HLS: OFF';
+                btn.style.background = '#28a745';
+                btn.style.color = 'white';
+            }
+
+            // 현재 재생 중인 영상이 있으면 다시 로드
+            if (currentVideo) {
+                const currentTime = videoPlayer.currentTime;
+                const wasPlaying = !videoPlayer.paused;
+
+                // 영상 다시 로드
+                playVideoInternal(currentVideo, currentTime, wasPlaying);
+            }
+        }
+
         // 트랜스코딩 토글
         function toggleTranscode() {
             transcodeEnabled = !transcodeEnabled;
             const btn = document.getElementById('transcodeBtn');
 
             if (transcodeEnabled) {
+                // 트랜스코딩 ON이면 HLS OFF
+                hlsEnabled = false;
+                document.getElementById('hlsBtn').textContent = '📡 HLS: OFF';
+                document.getElementById('hlsBtn').style.background = '#28a745';
+                document.getElementById('hlsBtn').style.color = 'white';
+
                 btn.textContent = '📱 트랜스코딩: ON';
-                btn.style.background = '#28a745';
+                btn.style.background = '#007bff';
                 btn.style.color = 'white';
             } else {
                 btn.textContent = '📱 트랜스코딩: OFF';
@@ -896,29 +993,83 @@
                 const currentTime = videoPlayer.currentTime;
                 const wasPlaying = !videoPlayer.paused;
 
+                // 영상 다시 로드
+                playVideoInternal(currentVideo, currentTime, wasPlaying);
+            }
+        }
+
+        // 내부 재생 함수 (시간 복원 포함)
+        function playVideoInternal(filename, seekTime = 0, autoPlay = false) {
+            currentVideo = filename;
+
+            // 기존 HLS 인스턴스 정리
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            // HLS 스트리밍 사용
+            if (hlsEnabled) {
+                const hlsUrl = `/api/hls/${encodeURIComponent(filename)}/playlist.m3u8`;
+
+                // iOS Safari는 네이티브 HLS 지원
+                if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoSource.src = hlsUrl;
+                    videoPlayer.load();
+
+                    videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                        videoPlayer.currentTime = seekTime;
+                        if (autoPlay) videoPlayer.play();
+                        videoPlayer.removeEventListener('loadedmetadata', onLoad);
+                    });
+                }
+                // 다른 브라우저는 HLS.js 사용
+                else if (Hls.isSupported()) {
+                    hls = new Hls({
+                        debug: false,
+                        enableWorker: true,
+                        lowLatencyMode: true,
+                        backBufferLength: 90
+                    });
+
+                    hls.loadSource(hlsUrl);
+                    hls.attachMedia(videoPlayer);
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        videoPlayer.currentTime = seekTime;
+                        if (autoPlay) videoPlayer.play();
+                    });
+
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        console.error('HLS Error:', data);
+                    });
+                }
+            }
+            // 일반 또는 트랜스코딩 재생
+            else {
                 const endpoint = transcodeEnabled
-                    ? `/api/transcode/${encodeURIComponent(currentVideo)}`
-                    : `/api/video/${encodeURIComponent(currentVideo)}`;
+                    ? `/api/transcode/${encodeURIComponent(filename)}`
+                    : `/api/video/${encodeURIComponent(filename)}`;
 
                 videoSource.src = endpoint;
                 videoPlayer.load();
 
-                // 이전 재생 위치로 복귀
                 videoPlayer.addEventListener('loadedmetadata', function onLoad() {
-                    videoPlayer.currentTime = currentTime;
-                    if (wasPlaying) {
-                        videoPlayer.play();
-                    }
+                    videoPlayer.currentTime = seekTime;
+                    if (autoPlay) videoPlayer.play();
                     videoPlayer.removeEventListener('loadedmetadata', onLoad);
                 });
+            }
 
-                // 정보 패널 업데이트
-                const video = videos.find(v => v.name === currentVideo);
-                if (video) {
-                    const transcodeInfo = transcodeEnabled ? ' | 📱 트랜스코딩 중 (iOS 호환)' : '';
-                    document.getElementById('currentVideoInfo').textContent =
-                        `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${transcodeInfo}`;
-                }
+            // 정보 패널 업데이트
+            const video = videos.find(v => v.name === currentVideo);
+            if (video) {
+                let modeInfo = '';
+                if (hlsEnabled) modeInfo = ' | 📡 HLS 스트리밍 (iOS 최적화)';
+                else if (transcodeEnabled) modeInfo = ' | 📱 트랜스코딩 중 (iOS 호환)';
+
+                document.getElementById('currentVideoInfo').textContent =
+                    `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${modeInfo}`;
             }
         }
 
@@ -1011,11 +1162,24 @@
 
         // 파일 크기 포맷
         function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+            if (!bytes || bytes === 0) return '0 Bytes';
+            const units = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+            const value = bytes / Math.pow(1024, i);
+            return `${value >= 10 || i === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[i]}`;
+        }
+
+        function formatBitrate(bps) {
+            if (!bps || bps <= 0) return null;
+            const units = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+            let value = bps;
+            let unitIndex = 0;
+            while (value >= 1000 && unitIndex < units.length - 1) {
+                value /= 1000;
+                unitIndex++;
+            }
+            const decimals = unitIndex === 0 ? 0 : 1;
+            return `${value.toFixed(decimals)} ${units[unitIndex]}`;
         }
 
         // 날짜 포맷
