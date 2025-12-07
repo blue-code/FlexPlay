@@ -224,6 +224,31 @@
             background: #218838;
         }
 
+        .bulk-actions {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0 5px 0;
+            flex-wrap: wrap;
+            padding: 8px 10px;
+            border: 1px dashed #d1d5db;
+            border-radius: 10px;
+            background: #fdfdfd;
+        }
+
+        .bulk-actions .bulk-actions-left {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .bulk-selection-info {
+            font-size: 0.9em;
+            color: #444;
+            font-weight: 600;
+        }
+
         .video-item {
             background: #f8f9fa;
             border-radius: 10px;
@@ -262,6 +287,15 @@
 
         .video-meta {
             flex: 1;
+        }
+
+        .video-select {
+            flex-shrink: 0;
+        }
+
+        .video-select input {
+            width: 18px;
+            height: 18px;
         }
 
         .video-item-header {
@@ -702,6 +736,17 @@
                     </div>
                 </div>
 
+                <div class="bulk-actions" id="bulkMoveBar">
+                    <div class="bulk-actions-left">
+                        <select class="move-select" id="bulkMoveTarget">
+                            <option value="">이동할 경로 선택</option>
+                        </select>
+                        <button class="move-btn" id="bulkMoveBtn" onclick="moveSelectedVideos()">선택 이동</button>
+                        <button class="select-all-btn" onclick="toggleSelectAllVisible()">목록 전체 선택/해제</button>
+                    </div>
+                    <div class="bulk-selection-info" id="bulkSelectionInfo">0개 선택됨</div>
+                </div>
+
                 <div id="videoList" class="loading">로딩 중...</div>
 
                 <!-- History Section -->
@@ -815,6 +860,8 @@
         let silentPlaylist = [];
         let silentPlaylistIndex = -1;
         let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
+        let selectedVideoNames = new Set();
+        let bulkMoveInProgress = false;
 
         // 구간 편집 관련 변수
         let editSegments = [];  // 삭제할 구간들 [{start: 0, end: 10}, ...]
@@ -964,13 +1011,16 @@
                     }
                     if (payload.meta && Array.isArray(payload.meta.move_targets)) {
                         moveTargets = payload.meta.move_targets;
+                        renderBulkMoveTargets();
                     }
                 }
 
                 if (includeMeta) {
                     renderExtensionChips(extensionMeta);
                 }
+                syncSelectionWithList(videos);
                 displayVideos(videos);
+                updateBulkSelectionInfo();
             } catch (error) {
                 if (container) {
                     container.innerHTML =
@@ -1050,6 +1100,144 @@
             loadVideos();
         }
 
+        function renderBulkMoveTargets() {
+            const bar = document.getElementById('bulkMoveBar');
+            const select = document.getElementById('bulkMoveTarget');
+            if (!bar || !select) return;
+
+            const previousValue = select.value;
+
+            if (!moveTargets || moveTargets.length === 0) {
+                bar.style.display = 'none';
+                select.innerHTML = '<option value="">이동할 경로 선택</option>';
+                return;
+            }
+
+            select.innerHTML = `
+                <option value="">이동할 경로 선택</option>
+                ${moveTargets.map(target => `
+                    <option value="${escapeHtml(target.name)}" title="${escapeHtml(target.path || '')}">
+                        ${escapeHtml(target.name)}
+                    </option>
+                `).join('')}
+            `;
+
+            bar.style.display = 'flex';
+            const hasPrevious = moveTargets.some(target => target.name === previousValue);
+            select.value = hasPrevious ? previousValue : '';
+        }
+
+        function syncSelectionWithList(list) {
+            const available = new Set((list || []).map(v => v.name));
+            Array.from(selectedVideoNames).forEach(name => {
+                if (!available.has(name)) {
+                    selectedVideoNames.delete(name);
+                }
+            });
+            updateBulkSelectionInfo();
+        }
+
+        function toggleVideoSelection(encodedName, event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            const name = decodeURIComponent(encodedName);
+            if (selectedVideoNames.has(name)) {
+                selectedVideoNames.delete(name);
+            } else {
+                selectedVideoNames.add(name);
+            }
+            updateBulkSelectionInfo();
+        }
+
+        function toggleSelectAllVisible() {
+            if (!videos || videos.length === 0) return;
+
+            const allSelected = videos.every(v => selectedVideoNames.has(v.name));
+            if (allSelected) {
+                videos.forEach(v => selectedVideoNames.delete(v.name));
+            } else {
+                videos.forEach(v => selectedVideoNames.add(v.name));
+            }
+            displayVideos(videos);
+            updateBulkSelectionInfo();
+        }
+
+        function updateBulkSelectionInfo() {
+            const info = document.getElementById('bulkSelectionInfo');
+            if (info) {
+                info.textContent = `${selectedVideoNames.size}개 선택됨`;
+            }
+            const moveBtn = document.getElementById('bulkMoveBtn');
+            if (moveBtn) {
+                moveBtn.disabled = selectedVideoNames.size === 0 || bulkMoveInProgress;
+            }
+        }
+
+        async function moveSelectedVideos() {
+            if (selectedVideoNames.size === 0) {
+                alert('이동할 영상을 선택해주세요.');
+                return;
+            }
+
+            const targetSelect = document.getElementById('bulkMoveTarget');
+            if (!targetSelect || !targetSelect.value) {
+                alert('이동할 경로를 선택해주세요.');
+                return;
+            }
+
+            const moveBtn = document.getElementById('bulkMoveBtn');
+            const previousText = moveBtn ? moveBtn.textContent : '';
+            bulkMoveInProgress = true;
+            updateBulkSelectionInfo();
+            if (moveBtn) {
+                moveBtn.textContent = '이동 중...';
+            }
+
+            try {
+                const response = await fetch('/api/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filenames: Array.from(selectedVideoNames),
+                        target: targetSelect.value
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || '이동에 실패했습니다.');
+                }
+
+                const summary = result.summary || {};
+                const failed = result.failed || [];
+                const moved = result.moved || [];
+                const movedCount = summary.moved ?? moved.length;
+                const requested = summary.requested ?? selectedVideoNames.size;
+
+                let message = `총 ${requested}개 중 ${movedCount}개 이동 완료`;
+                if (failed.length > 0) {
+                    message += `\n실패: ${failed.map(f => `${f.filename} (${f.error || '오류'})`).join(', ')}`;
+                    selectedVideoNames = new Set(failed.map(f => f.filename));
+                } else {
+                    selectedVideoNames.clear();
+                }
+
+                alert(message);
+                updateBulkSelectionInfo();
+                await loadVideos();
+            } catch (error) {
+                alert('이동 중 오류가 발생했습니다: ' + error.message);
+                console.error('Bulk move error:', error);
+            } finally {
+                bulkMoveInProgress = false;
+                if (moveBtn) {
+                    moveBtn.textContent = previousText || '선택 이동';
+                }
+                updateBulkSelectionInfo();
+            }
+        }
+
+
         // 영상 목록 표시
         function displayVideos(videoList) {
             const container = document.getElementById('videoList');
@@ -1075,28 +1263,18 @@
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                 const watchedBadge = video.watched ? '<span class="watched-badge">👁️ 시청함</span>' : '';
                 const isActive = currentVideo === video.name;
-                const moveControl = moveTargets.length ? `
-                    <div class="video-actions" onclick="event.stopPropagation()">
-                        <select class="move-select"
-                                data-filename="${encodedName}"
-                                onchange="event.stopPropagation()"
-                                onclick="event.stopPropagation()">
-                            <option value="">이동할 경로 선택</option>
-                            ${moveTargets.map(target => `
-                                <option value="${escapeHtml(target.name)}" title="${escapeHtml(target.path || '')}">
-                                    ${escapeHtml(target.name)}
-                                </option>
-                            `).join('')}
-                        </select>
-                        <button class="move-btn"
-                                onclick="handleMoveClick(decodeURIComponent('${encodedName}'), event)">이동</button>
-                    </div>
-                ` : '';
+                const isSelected = selectedVideoNames.has(video.name);
 
                 return `
                     <div class="video-item ${isActive ? 'active' : ''}"
                          data-filename="${encodedName}"
                          onclick="playVideo(decodeURIComponent('${encodedName}'), event)">
+                        <div class="video-select" onclick="event.stopPropagation()">
+                            <input type="checkbox"
+                                   ${isSelected ? 'checked' : ''}
+                                   aria-label="영상 선택"
+                                   onchange="toggleVideoSelection('${encodedName}', event)">
+                        </div>
                         <div class="video-thumb">${thumbContent}</div>
                         <div class="video-meta">
                             <div class="video-item-header">
@@ -1113,7 +1291,6 @@
                             </div>
                             <button class="delete-btn"
                                     onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
-                            ${moveControl}
                         </div>
                     </div>
                 `;
@@ -1136,46 +1313,6 @@
             thumbnailRefreshHandle = setTimeout(() => {
                 loadVideos({ skipLoader: true, includeMeta: false });
             }, 4000);
-        }
-
-        function handleMoveClick(filename, evt) {
-            evt.stopPropagation();
-            const container = evt.currentTarget.closest('.video-item');
-            const select = container ? container.querySelector('.move-select') : null;
-            if (!select || !select.value) {
-                alert('이동할 경로를 선택해주세요.');
-                return;
-            }
-            moveVideoRequest(filename, select.value, select);
-        }
-
-        async function moveVideoRequest(filename, targetName, selectEl) {
-            try {
-                selectEl.disabled = true;
-                const response = await fetch('/api/move', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filename, target: targetName })
-                });
-                const result = await response.json();
-                if (response.ok && result.success) {
-                    alert('영상이 이동되었습니다.');
-                    if (currentVideo === filename) {
-                        videoPlayer.pause();
-                        videoSource.src = '';
-                        currentVideo = null;
-                        document.getElementById('infoPanel').style.display = 'none';
-                    }
-                    await loadVideos();
-                } else {
-                    alert('이동 실패: ' + (result.error || '알 수 없는 오류'));
-                }
-            } catch (error) {
-                alert('이동 중 오류가 발생했습니다.');
-                console.error('Error moving video:', error);
-            } finally {
-                selectEl.disabled = false;
-            }
         }
 
         // 영상 재생

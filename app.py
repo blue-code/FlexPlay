@@ -6,6 +6,7 @@ import uuid
 import time
 import shutil
 import platform
+import hashlib
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, send_file, Response, stream_with_context
 from urllib.parse import unquote
@@ -23,6 +24,13 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 THUMBNAILS_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'thumbnails')
 HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'history.json')
 media_info_cache = {}
+FFMPEG_AVAILABLE = shutil.which('ffmpeg') is not None
+FFMPEG_WARNING_EMITTED = False
+
+# 썸네일 생성 상태 추적
+thumbnail_jobs = set()
+thumbnail_jobs_lock = threading.Lock()
+thumbnail_workers = threading.Semaphore(2)
 
 def load_config():
     """설정 파일 로드"""
@@ -39,13 +47,20 @@ def get_video_folders():
     config = load_config()
     return config.get('video_folders', [])
 
+
+def get_move_targets():
+    """파일 이동 대상 목록 가져오기"""
+    config = load_config()
+    return config.get('move_targets', [])
+
 def get_cache_settings():
     """캐시 설정 가져오기"""
     config = load_config()
     default_settings = {
         'max_age_days': 7,
         'max_size_gb': 50,
-        'cleanup_interval_hours': 24
+        'cleanup_interval_hours': 24,
+        'thumbnail_retention_days': 7
     }
     return config.get('cache_settings', default_settings)
 
@@ -161,10 +176,244 @@ def find_video_path(filename):
     return None
 
 
+def get_thumbnail_filename(folder_path, filename):
+    """썸네일 파일명을 안정적으로 생성"""
+    base = f"{os.path.abspath(folder_path)}::{filename}"
+    digest = hashlib.md5(base.encode('utf-8')).hexdigest()
+    return f"{digest}.jpg"
+
+
+def generate_unique_destination(folder_path, filename):
+    """목표 폴더 내에서 겹치지 않는 파일 경로 생성"""
+    name, ext = os.path.splitext(filename)
+    counter = 0
+
+    while True:
+        suffix = f"_{counter}" if counter > 0 else ''
+        candidate_name = f"{name}{suffix}{ext}"
+        try:
+            candidate_path = safe_join(folder_path, candidate_name)
+        except ValueError:
+            raise ValueError("Invalid destination path")
+
+        if not os.path.exists(candidate_path):
+            return candidate_path, candidate_name
+        counter += 1
+
+
+def schedule_thumbnail_generation(video_path, folder_path, filename, thumbnail_path, duration=None):
+    """썸네일 생성을 백그라운드로 예약"""
+    if not FFMPEG_AVAILABLE:
+        global FFMPEG_WARNING_EMITTED
+        if not FFMPEG_WARNING_EMITTED:
+            print("[Thumbnail] ffmpeg binary not found; skipping thumbnail generation.")
+            FFMPEG_WARNING_EMITTED = True
+        return False
+
+    job_key = f"{os.path.abspath(folder_path)}::{filename}"
+
+    with thumbnail_jobs_lock:
+        if job_key in thumbnail_jobs:
+            return True
+        thumbnail_jobs.add(job_key)
+
+    def worker():
+        try:
+            generate_thumbnail(video_path, thumbnail_path, duration)
+        finally:
+            with thumbnail_jobs_lock:
+                thumbnail_jobs.discard(job_key)
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    return True
+
+
+def determine_thumbnail_seek(duration):
+    if not duration or duration <= 0.5:
+        return 0.0
+
+    safe_duration = max(duration - 0.25, 0)
+    target = min(max(duration * 0.2, 1.0), safe_duration)
+    return round(target, 2)
+
+
+def generate_thumbnail(video_path, thumbnail_path, duration=None):
+    """ffmpeg으로 썸네일 생성"""
+    temp_output = f"{thumbnail_path}.tmp"
+
+    thumbnail_workers.acquire()
+    try:
+        os.makedirs(os.path.dirname(thumbnail_path), exist_ok=True)
+
+        seek_time = determine_thumbnail_seek(duration)
+
+        def run_ffmpeg(seek):
+            cmd = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error']
+            if seek and seek > 0:
+                cmd.extend(['-ss', f"{seek:.2f}"])
+            cmd.extend([
+                '-i', video_path,
+                '-frames:v', '1',
+                '-vf', 'thumbnail,scale=320:-1',
+                '-q:v', '4',
+                '-an',
+                '-f', 'image2',
+                temp_output
+            ])
+            subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=True,
+                text=True
+            )
+
+        try:
+            run_ffmpeg(seek_time)
+        except subprocess.CalledProcessError as exc:
+            error_output = exc.stderr.strip() if exc.stderr else 'unknown ffmpeg error'
+            print(f"[Thumbnail] Primary attempt failed at {seek_time}s for {video_path}: {error_output}")
+            # 짧은 영상 대비: 0초 지점으로 재시도
+            run_ffmpeg(0)
+
+        if os.path.exists(temp_output):
+            os.replace(temp_output, thumbnail_path)
+    except Exception as exc:
+        # ffmpeg 실패 시 임시 파일 제거 후 로그 출력
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
+        print(f"[Thumbnail] Failed to generate for {video_path}: {exc}")
+    finally:
+        thumbnail_workers.release()
+
+
+def ensure_thumbnail_ready(video_path, folder_path, filename, source_mtime, duration=None):
+    """썸네일 파일이 최신인지 확인하고 필요 시 생성을 예약"""
+    if not FFMPEG_AVAILABLE:
+        return None, False
+
+    thumbnail_name = get_thumbnail_filename(folder_path, filename)
+    thumbnail_path = os.path.join(THUMBNAILS_FOLDER, thumbnail_name)
+    thumbnail_url = f"/static/thumbnails/{thumbnail_name}"
+
+    if os.path.exists(thumbnail_path):
+        thumb_mtime = os.path.getmtime(thumbnail_path)
+        if not source_mtime or thumb_mtime >= source_mtime:
+            return thumbnail_url, False
+
+    scheduled = schedule_thumbnail_generation(video_path, folder_path, filename, thumbnail_path, duration)
+
+    if os.path.exists(thumbnail_path):
+        # 기존 썸네일이 있으면 우선 제공하고, 백그라운드에서 최신화
+        return thumbnail_url, scheduled
+
+    return None, scheduled
+
+
+def delete_thumbnail_for_video(video_path):
+    """영상 파일에 해당하는 썸네일 삭제"""
+    folder_path = os.path.dirname(video_path)
+    filename = os.path.basename(video_path)
+    thumbnail_name = get_thumbnail_filename(folder_path, filename)
+    thumbnail_path = os.path.join(THUMBNAILS_FOLDER, thumbnail_name)
+
+    if os.path.exists(thumbnail_path):
+        try:
+            os.remove(thumbnail_path)
+            print(f"[Thumbnail] Removed thumbnail for {video_path}")
+        except Exception as exc:
+            print(f"[Thumbnail] Failed to delete thumbnail {thumbnail_path}: {exc}")
+
+
+def cleanup_orphan_thumbnails(retention_days):
+    """설정된 보존 기간이 지난 고아 썸네일 삭제"""
+    if not os.path.exists(THUMBNAILS_FOLDER):
+        return
+
+    folders = get_video_folders()
+    valid_thumbnails = set()
+
+    for folder_info in folders:
+        folder_path = folder_info.get('path')
+        if not folder_path or not os.path.exists(folder_path):
+            continue
+
+        try:
+            for file in os.listdir(folder_path):
+                file_path = os.path.join(folder_path, file)
+                if not os.path.isfile(file_path):
+                    continue
+                ext = os.path.splitext(file)[1].lower()
+                if ext in VIDEO_EXTENSIONS:
+                    valid_thumbnails.add(get_thumbnail_filename(folder_path, file))
+        except Exception as exc:
+            print(f"[Thumbnail] Failed to scan folder {folder_path}: {exc}")
+
+    retention_seconds = max(retention_days, 0) * 24 * 60 * 60 if retention_days else 0
+    now = time.time()
+    removed = 0
+
+    for thumb_name in os.listdir(THUMBNAILS_FOLDER):
+        thumb_path = os.path.join(THUMBNAILS_FOLDER, thumb_name)
+        if not os.path.isfile(thumb_path):
+            continue
+
+        if thumb_name in valid_thumbnails:
+            continue
+
+        age = now - os.path.getmtime(thumb_path)
+        if retention_seconds and age < retention_seconds:
+            continue
+
+        try:
+            os.remove(thumb_path)
+            removed += 1
+        except Exception as exc:
+            print(f"[Thumbnail] Failed to remove orphan thumbnail {thumb_path}: {exc}")
+
+    if removed:
+        print(f"[Thumbnail] Cleaned up {removed} orphan thumbnails")
+
+
 def get_mime_type(filename):
     """파일 확장자로 MIME 타입 반환"""
     ext = os.path.splitext(filename)[1].lower()
     return MIME_TYPES.get(ext) or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+
+
+def parse_float(value):
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def normalize_extension(ext):
+    if not ext:
+        return ''
+    ext = ext.strip().lower()
+    if ext and not ext.startswith('.'):
+        ext = f'.{ext}'
+    return ext
+
+
+def matches_search_query(video, query):
+    if not query:
+        return True
+
+    query = query.lower()
+    fields = [
+        video.get('name', ''),
+        video.get('folder', ''),
+        video.get('video_codec_info', ''),
+        video.get('audio_codec_info', '')
+    ]
+    return any(query in (field or '').lower() for field in fields)
 
 
 def get_media_info(file_path):
@@ -205,6 +454,9 @@ def get_media_info(file_path):
             return None
 
         metadata['bitrate'] = parse_bit_rate(format_info.get('bit_rate'))
+        duration = parse_float(format_info.get('duration'))
+        if duration and duration > 0:
+            metadata['duration'] = duration
 
         video_stream = next((s for s in streams if s.get('codec_type') == 'video'), None)
         if video_stream:
@@ -260,6 +512,13 @@ def get_video_files(folder_filter=None):
                 if ext in VIDEO_EXTENSIONS:
                     stat = os.stat(file_path)
                     media_info = get_media_info(file_path)
+                    thumbnail_url, thumbnail_pending = ensure_thumbnail_ready(
+                        file_path,
+                        folder_path,
+                        file,
+                        stat.st_mtime,
+                        media_info.get('duration') if media_info else None
+                    )
                     video_files.append({
                         'name': file,
                         'path': file,
@@ -267,6 +526,8 @@ def get_video_files(folder_filter=None):
                         'size': stat.st_size,
                         'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                         'extension': ext,
+                        'thumbnail_url': thumbnail_url,
+                        'thumbnail_pending': thumbnail_pending,
                         **media_info
                     })
 
@@ -332,10 +593,46 @@ def get_videos():
     """영상 목록 API"""
     # 쿼리 파라미터에서 폴더 필터 가져오기
     folders_param = request.args.get('folders', '')
-    folder_filter = folders_param.split(',') if folders_param else None
+    folder_filter = [f for f in folders_param.split(',') if f] if folders_param else None
+
+    search_query = request.args.get('search', '').strip()
+    extensions_param = request.args.get('extensions', '').strip()
+    include_meta = request.args.get('with_meta') == '1'
 
     videos = get_video_files(folder_filter)
-    return jsonify(videos)
+    history_entries = load_history()
+    watched_files = {entry.get('filename') for entry in history_entries if entry.get('filename')}
+    for video in videos:
+        video['watched'] = video['name'] in watched_files
+    available_extensions = []
+
+    if include_meta:
+        available_extensions = sorted({v['extension'] for v in videos if v.get('extension')})
+
+    filtered_videos = videos
+
+    if search_query:
+        filtered_videos = [v for v in filtered_videos if matches_search_query(v, search_query)]
+
+    if extensions_param:
+        ext_filter = {
+            normalize_extension(ext)
+            for ext in extensions_param.split(',')
+            if ext.strip()
+        }
+        if ext_filter:
+            filtered_videos = [v for v in filtered_videos if v.get('extension') in ext_filter]
+
+    if include_meta:
+        return jsonify({
+            'videos': filtered_videos,
+            'meta': {
+                'extensions': available_extensions,
+                'move_targets': get_move_targets()
+            }
+        })
+
+    return jsonify(filtered_videos)
 
 
 @app.route('/api/video/<path:filename>')
@@ -588,9 +885,108 @@ def delete_video(filename):
         history = [h for h in history if h.get('filename') != decoded_filename]
         save_history(history)
 
+        delete_thumbnail_for_video(video_path)
+
         return jsonify({'success': True, 'message': 'Video deleted successfully'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/move', methods=['POST'])
+def move_video_to_target():
+    """영상 파일을 지정된 이동 대상 폴더로 이동 (단일 또는 다중)"""
+    data = request.get_json() or {}
+    filename = data.get('filename')
+    filenames = data.get('filenames')
+    target_name = data.get('target')
+
+    if not target_name:
+        return jsonify({'error': 'target is required'}), 400
+
+    target_candidates = get_move_targets()
+    target_entry = next((t for t in target_candidates if t.get('name') == target_name), None)
+    if not target_entry:
+        return jsonify({'error': 'Invalid target'}), 400
+
+    target_folder = target_entry.get('path')
+    if not target_folder:
+        return jsonify({'error': 'Target path not configured'}), 400
+
+    os.makedirs(target_folder, exist_ok=True)
+
+    def move_single(name):
+        video_path = find_video_path(name)
+        if not video_path or not os.path.exists(video_path):
+            return {'filename': name, 'success': False, 'error': 'Video not found'}
+
+        try:
+            destination_path, destination_name = generate_unique_destination(
+                target_folder,
+                os.path.basename(name)
+            )
+        except ValueError:
+            return {'filename': name, 'success': False, 'error': 'Failed to resolve destination path'}
+
+        try:
+            shutil.move(video_path, destination_path)
+            delete_thumbnail_for_video(video_path)
+        except Exception as exc:
+            return {'filename': name, 'success': False, 'error': f'Failed to move file: {exc}'}
+
+        return {
+            'filename': name,
+            'success': True,
+            'destination': destination_path,
+            'destination_name': destination_name
+        }
+
+    # 다중 이동 처리
+    if filenames:
+        if not isinstance(filenames, list):
+            return jsonify({'error': 'filenames must be a list'}), 400
+
+        unique_names = []
+        seen = set()
+        for name in filenames:
+            if not isinstance(name, str):
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            unique_names.append(name)
+
+        if not unique_names:
+            return jsonify({'error': 'No valid filenames provided'}), 400
+
+        results = [move_single(name) for name in unique_names]
+        success_count = sum(1 for r in results if r.get('success'))
+        failure_count = len(results) - success_count
+
+        status_code = 200 if failure_count == 0 else 207  # 207: multi-status like response
+        return jsonify({
+            'success': failure_count == 0,
+            'moved': [r for r in results if r.get('success')],
+            'failed': [r for r in results if not r.get('success')],
+            'summary': {
+                'requested': len(unique_names),
+                'moved': success_count,
+                'failed': failure_count
+            }
+        }), status_code
+
+    # 단일 이동 처리 (기존 호환)
+    if not filename:
+        return jsonify({'error': 'filename or filenames is required'}), 400
+
+    result = move_single(filename)
+    if not result.get('success'):
+        return jsonify({'error': result.get('error', 'Failed to move file')}), 400
+
+    return jsonify({
+        'success': True,
+        'destination': result['destination'],
+        'destination_name': result['destination_name']
+    })
 
 
 def get_directory_size(directory):
@@ -613,6 +1009,7 @@ def cleanup_old_cache():
         settings = get_cache_settings()
         max_age_days = settings['max_age_days']
         max_size_gb = settings['max_size_gb']
+        thumbnail_retention_days = settings.get('thumbnail_retention_days', max_age_days)
 
         cache_dirs = [
             os.path.join(os.path.dirname(__file__), 'static', 'transcoded'),
@@ -697,6 +1094,8 @@ def cleanup_old_cache():
                     print(f"Deleted cache (size limit): {item_path}")
                 except Exception as e:
                     print(f"Error deleting {item_path}: {e}")
+
+        cleanup_orphan_thumbnails(thumbnail_retention_days)
 
         if deleted_count > 0:
             print(f"Cache cleanup completed: {deleted_count} items deleted, {freed_space / (1024*1024):.2f} MB freed")
