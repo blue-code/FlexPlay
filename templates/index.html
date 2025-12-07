@@ -251,15 +251,16 @@
 
         .video-item {
             background: #f8f9fa;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 12px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             cursor: pointer;
             transition: all 0.3s;
             border-left: 4px solid transparent;
-            display: flex;
+            display: grid;
+            grid-template-columns: auto 150px 1fr;
             gap: 12px;
-            align-items: center;
+            align-items: stretch;
         }
 
         .video-item:hover {
@@ -274,23 +275,23 @@
         }
 
         .video-item-name {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 4px;
             word-break: break-word;
         }
 
-        .video-item-info {
-            font-size: 0.85em;
-            color: #666;
-        }
-
         .video-meta {
-            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .video-select {
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .video-select input {
@@ -301,8 +302,60 @@
         .video-item-header {
             display: flex;
             justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .meta-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .meta-subline {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 0.85em;
+            color: #555;
+        }
+
+        .info-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            background: #eef2ff;
+            color: #30336b;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.8em;
+        }
+
+        .info-chip .label {
+            color: #566;
+            font-weight: 500;
+        }
+
+        .codec-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            background: #f4f4f5;
+            color: #444;
+            border-radius: 8px;
+            font-size: 0.82em;
+            font-weight: 600;
+        }
+
+        .video-actions-row {
+            display: flex;
+            justify-content: space-between;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .watched-badge {
@@ -316,15 +369,16 @@
         }
 
         .video-thumb {
-            width: 120px;
-            height: 70px;
-            border-radius: 8px;
+            width: 150px;
+            height: 90px;
+            border-radius: 10px;
             overflow: hidden;
-            background: #1d1d1f;
+            background: #0f1115;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
         }
 
         .video-thumb img {
@@ -667,6 +721,21 @@
 
             .video-list-container {
                 max-height: 40vh;
+            }
+
+            .video-item {
+                grid-template-columns: auto 120px 1fr;
+                gap: 10px;
+            }
+
+            .video-thumb {
+                width: 120px;
+                height: 72px;
+            }
+
+            .video-actions-row {
+                flex-direction: column;
+                align-items: flex-start;
             }
         }
 
@@ -1264,6 +1333,7 @@
                 const watchedBadge = video.watched ? '<span class="watched-badge">👁️ 시청함</span>' : '';
                 const isActive = currentVideo === video.name;
                 const isSelected = selectedVideoNames.has(video.name);
+                const extensionLabel = video.extension ? video.extension.replace('.', '').toUpperCase() : '';
 
                 return `
                     <div class="video-item ${isActive ? 'active' : ''}"
@@ -1277,20 +1347,34 @@
                         </div>
                         <div class="video-thumb">${thumbContent}</div>
                         <div class="video-meta">
-                            <div class="video-item-header">
-                                <div class="video-item-name">${escapeHtml(video.name)}</div>
+                            <div class="video-item-header meta-top">
+                                <div>
+                                    <div class="video-item-name">${escapeHtml(video.name)}</div>
+                                    <div class="meta-subline">
+                                        ${extensionLabel ? `<span class="info-chip"><span class="label">확장</span>${extensionLabel}</span>` : ''}
+                                        ${bitrateText ? `<span class="info-chip"><span class="label">비트</span>${bitrateText}</span>` : ''}
+                                    </div>
+                                </div>
                                 ${watchedBadge}
                             </div>
-                            <div class="video-item-info">
-                                폴더: ${escapeHtml(video.folder || 'Unknown')}<br>
-                                크기: ${formatFileSize(video.size)}<br>
-                                수정일: ${formatDate(video.modified)}<br>
-                                ${video.video_codec_info ? `영상 코덱: ${escapeHtml(video.video_codec_info)}<br>` : ''}
-                                ${video.audio_codec_info ? `오디오 코덱: ${escapeHtml(video.audio_codec_info)}<br>` : ''}
-                                ${bitrateText ? `총 비트레이트: ${bitrateText}` : ''}
+                            <div class="meta-subline">
+                                <span class="info-chip"><span class="label">폴더</span>${escapeHtml(video.folder || 'Unknown')}</span>
+                                <span class="info-chip"><span class="label">크기</span>${formatFileSize(video.size)}</span>
+                                <span class="info-chip"><span class="label">수정</span>${formatDate(video.modified)}</span>
                             </div>
-                            <button class="delete-btn"
-                                    onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
+                            <div class="meta-subline">
+                                ${video.video_codec_info ? `<span class="codec-chip">🎞 ${escapeHtml(video.video_codec_info)}</span>` : ''}
+                                ${video.audio_codec_info ? `<span class="codec-chip">🔊 ${escapeHtml(video.audio_codec_info)}</span>` : ''}
+                            </div>
+                            <div class="video-actions-row">
+                                <div class="meta-subline">
+                                    ${silentPlaylistEnabled && isActive ? '<span class="info-chip">🔇 무소음</span>' : ''}
+                                    ${hlsEnabled && isActive ? '<span class="info-chip">📡 HLS</span>' : ''}
+                                    ${transcodeEnabled && isActive ? '<span class="info-chip">📱 트랜스코딩</span>' : ''}
+                                </div>
+                                <button class="delete-btn"
+                                        onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
+                            </div>
                         </div>
                     </div>
                 `;
