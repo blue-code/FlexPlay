@@ -92,6 +92,80 @@
             margin-bottom: 8px;
         }
 
+        .search-filter {
+            background: #fefefe;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #e2e6ff;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #cfd4ff;
+            font-size: 0.95em;
+        }
+
+        .clear-search-btn {
+            background: #f1f3ff;
+            color: #424874;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+
+        .clear-search-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .extension-filter {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .extension-filter span {
+            font-size: 0.85em;
+            color: #555;
+        }
+
+        .extension-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .extension-chip {
+            border: 1px solid #c5cfff;
+            border-radius: 20px;
+            padding: 6px 12px;
+            background: white;
+            font-size: 0.8em;
+            cursor: pointer;
+            color: #4a4a8a;
+            transition: all 0.2s;
+        }
+
+        .extension-chip.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+            box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3);
+        }
+
         .folder-list {
             display: flex;
             flex-direction: column;
@@ -158,6 +232,9 @@
             cursor: pointer;
             transition: all 0.3s;
             border-left: 4px solid transparent;
+            display: flex;
+            gap: 12px;
+            align-items: center;
         }
 
         .video-item:hover {
@@ -181,6 +258,88 @@
         .video-item-info {
             font-size: 0.85em;
             color: #666;
+        }
+
+        .video-meta {
+            flex: 1;
+        }
+
+        .video-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .watched-badge {
+            background: #e0f7f4;
+            color: #0f766e;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.75em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .video-thumb {
+            width: 120px;
+            height: 70px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #1d1d1f;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .thumb-placeholder {
+            color: #f0f0f0;
+            font-size: 0.75em;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .video-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .move-select {
+            flex: 0 1 140px;
+            min-width: 120px;
+            max-width: 180px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            font-size: 0.85em;
+            background: #fff;
+            text-overflow: ellipsis;
+        }
+
+        .move-btn {
+            background: #20b2aa;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .move-btn:hover {
+            background: #1a8f88;
         }
 
         .delete-btn {
@@ -253,6 +412,7 @@
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+            margin-bottom: 15px;
         }
 
         .speed-btn {
@@ -529,6 +689,19 @@
                     <button class="select-all-btn" onclick="toggleAllFolders()">전체 선택/해제</button>
                 </div>
 
+                <div class="search-filter">
+                    <div class="search-row">
+                        <input type="text" id="searchInput" class="search-input" placeholder="파일명, 폴더, 코덱 검색" oninput="handleSearchInput(event)">
+                        <button id="clearSearchBtn" class="clear-search-btn" onclick="clearSearch()" disabled>초기화</button>
+                    </div>
+                    <div class="extension-filter">
+                        <span>🎯 확장자 필터</span>
+                        <div id="extensionChips" class="extension-chips">
+                            <p style="font-size: 0.8em; color: #777;">확장자 정보를 불러오는 중...</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="videoList" class="loading">로딩 중...</div>
 
                 <!-- History Section -->
@@ -541,10 +714,21 @@
             <!-- Video Player -->
             <div class="player-container">
                 <div class="video-wrapper">
-                    <video id="videoPlayer" controls>
+                    <video id="videoPlayer" controls playsinline webkit-playsinline>
                         <source id="videoSource" src="" type="video/mp4">
                         브라우저가 비디오 태그를 지원하지 않습니다.
                     </video>
+                </div>
+
+                <div class="speed-controls">
+                    <button class="speed-btn" data-speed="0.5" onclick="setPlaybackSpeed(0.5)">0.5x</button>
+                    <button class="speed-btn" data-speed="0.75" onclick="setPlaybackSpeed(0.75)">0.75x</button>
+                    <button class="speed-btn" data-speed="1" onclick="setPlaybackSpeed(1)">1x</button>
+                    <button class="speed-btn" data-speed="1.25" onclick="setPlaybackSpeed(1.25)">1.25x</button>
+                    <button class="speed-btn" data-speed="1.5" onclick="setPlaybackSpeed(1.5)">1.5x</button>
+                    <button class="speed-btn" data-speed="2" onclick="setPlaybackSpeed(2)">2x</button>
+                    <button class="speed-btn" data-speed="3" onclick="setPlaybackSpeed(3)">3x</button>
+                    <button class="speed-btn" data-speed="4" onclick="setPlaybackSpeed(4)">4x</button>
                 </div>
 
                 <div class="controls">
@@ -552,17 +736,9 @@
                     <button class="control-btn" onclick="skipForward()">⏩ 10초 앞으로</button>
                     <button class="control-btn" onclick="toggleFullscreen()">🖥️ 전체화면</button>
                     <button class="control-btn" onclick="togglePlayPause()">⏯️ 재생/일시정지</button>
+                    <button class="control-btn" id="silentPlaylistBtn" onclick="toggleSilentPlaylist()" style="background: #6c757d; color: white;">🔇 무소음 전체재생: OFF</button>
                     <button class="control-btn" id="hlsBtn" onclick="toggleHLS()" style="background: #28a745; color: white;">📡 HLS: OFF</button>
                     <button class="control-btn" id="transcodeBtn" onclick="toggleTranscode()" style="background: #ffc107; color: #333;">📱 트랜스코딩: OFF</button>
-                </div>
-
-                <div class="speed-controls">
-                    <button class="speed-btn" onclick="setPlaybackSpeed(0.5)">0.5x</button>
-                    <button class="speed-btn" onclick="setPlaybackSpeed(0.75)">0.75x</button>
-                    <button class="speed-btn active" onclick="setPlaybackSpeed(1)">1x</button>
-                    <button class="speed-btn" onclick="setPlaybackSpeed(1.25)">1.25x</button>
-                    <button class="speed-btn" onclick="setPlaybackSpeed(1.5)">1.5x</button>
-                    <button class="speed-btn" onclick="setPlaybackSpeed(2)">2x</button>
                 </div>
 
                 <div class="info-panel" id="infoPanel" style="display: none;">
@@ -629,6 +805,16 @@
         let hls = null;  // HLS.js 인스턴스
         let folders = [];  // 폴더 목록
         let selectedFolders = new Set();  // 선택된 폴더들
+        let searchTerm = '';
+        let searchDebounce = null;
+        let selectedExtensions = new Set();
+        let thumbnailRefreshHandle = null;
+        let moveTargets = [];
+        let currentPlaybackSpeed = 1;
+        let silentPlaylistEnabled = false;
+        let silentPlaylist = [];
+        let silentPlaylistIndex = -1;
+        let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
 
         // 구간 편집 관련 변수
         let editSegments = [];  // 삭제할 구간들 [{start: 0, end: 10}, ...]
@@ -643,6 +829,8 @@
             loadHistory();
             setupKeyboardShortcuts();
             setupVideoErrorHandler();
+            setupSilentPlaylistSupport();
+            updateSpeedButtonState();
         });
 
         // 비디오 오류 핸들러 설정
@@ -732,53 +920,274 @@
         }
 
         // 영상 목록 불러오기
-        async function loadVideos() {
-            try {
-                // 선택된 폴더들을 쿼리 파라미터로 전달
-                const foldersParam = Array.from(selectedFolders).join(',');
-                const url = foldersParam ? `/api/videos?folders=${encodeURIComponent(foldersParam)}` : '/api/videos';
+        async function loadVideos(options = {}) {
+            const container = document.getElementById('videoList');
+            if (!options.skipLoader && container) {
+                container.innerHTML = '<div class="loading">영상 목록을 불러오는 중...</div>';
+            }
 
-                const response = await fetch(url);
-                videos = await response.json();
+            if (thumbnailRefreshHandle) {
+                clearTimeout(thumbnailRefreshHandle);
+                thumbnailRefreshHandle = null;
+            }
+
+            try {
+                const params = new URLSearchParams();
+                const includeMeta = options.includeMeta !== false;
+
+                if (selectedFolders.size > 0) {
+                    params.set('folders', Array.from(selectedFolders).join(','));
+                }
+
+                if (searchTerm.trim().length > 0) {
+                    params.set('search', searchTerm.trim());
+                }
+
+                if (selectedExtensions.size > 0) {
+                    params.set('extensions', Array.from(selectedExtensions).join(','));
+                }
+
+                if (includeMeta) {
+                    params.set('with_meta', '1');
+                }
+
+                const response = await fetch(`/api/videos?${params.toString()}`);
+                const payload = await response.json();
+
+                let extensionMeta = [];
+                if (Array.isArray(payload)) {
+                    videos = payload;
+                } else {
+                    videos = payload.videos || [];
+                    if (payload.meta && Array.isArray(payload.meta.extensions)) {
+                        extensionMeta = payload.meta.extensions;
+                    }
+                    if (payload.meta && Array.isArray(payload.meta.move_targets)) {
+                        moveTargets = payload.meta.move_targets;
+                    }
+                }
+
+                if (includeMeta) {
+                    renderExtensionChips(extensionMeta);
+                }
                 displayVideos(videos);
             } catch (error) {
-                document.getElementById('videoList').innerHTML =
-                    '<div class="error">영상 목록을 불러오는데 실패했습니다.</div>';
+                if (container) {
+                    container.innerHTML =
+                        '<div class="error">영상 목록을 불러오는데 실패했습니다.</div>';
+                }
                 console.error('Error loading videos:', error);
             }
+        }
+
+        function handleSearchInput(event) {
+            searchTerm = event.target.value || '';
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) {
+                clearBtn.disabled = searchTerm.trim().length === 0;
+            }
+
+            if (searchDebounce) {
+                clearTimeout(searchDebounce);
+            }
+            searchDebounce = setTimeout(() => loadVideos({ skipLoader: true }), 250);
+        }
+
+        function clearSearch() {
+            searchTerm = '';
+            const input = document.getElementById('searchInput');
+            if (input) {
+                input.value = '';
+            }
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) {
+                clearBtn.disabled = true;
+            }
+            loadVideos();
+        }
+
+        function renderExtensionChips(extensionList) {
+            const container = document.getElementById('extensionChips');
+            if (!container) return;
+
+            const merged = new Set(extensionList || []);
+            selectedExtensions.forEach(ext => merged.add(ext));
+            const sorted = Array.from(merged).sort();
+
+            if (sorted.length === 0) {
+                container.innerHTML = '<p style="font-size: 0.8em; color: #777;">선택된 폴더에서 발견된 확장자가 없습니다.</p>';
+                return;
+            }
+
+            const chips = sorted.map(ext => `
+                <button type="button"
+                        class="extension-chip ${selectedExtensions.has(ext) ? 'active' : ''}"
+                        onclick="toggleExtensionFilter('${ext}')">
+                    ${ext.replace('.', '').toUpperCase()}
+                </button>
+            `).join('');
+
+            container.innerHTML = `
+                <button type="button"
+                        class="extension-chip ${selectedExtensions.size === 0 ? 'active' : ''}"
+                        onclick="resetExtensionFilters()">ALL</button>
+                ${chips}
+            `;
+        }
+
+        function toggleExtensionFilter(extension) {
+            if (selectedExtensions.has(extension)) {
+                selectedExtensions.delete(extension);
+            } else {
+                selectedExtensions.add(extension);
+            }
+            loadVideos();
+        }
+
+        function resetExtensionFilters() {
+            if (selectedExtensions.size === 0) return;
+            selectedExtensions.clear();
+            loadVideos();
         }
 
         // 영상 목록 표시
         function displayVideos(videoList) {
             const container = document.getElementById('videoList');
+            const hasFilter = searchTerm.trim().length > 0 || selectedExtensions.size > 0;
 
-            if (videoList.length === 0) {
-                container.innerHTML = '<div class="no-video">영상 파일이 없습니다.<br>videos 폴더에 영상을 추가해주세요.</div>';
+            if (!videoList || videoList.length === 0) {
+                container.innerHTML = hasFilter
+                    ? '<div class="no-video">검색/필터 조건과 일치하는 영상이 없습니다.</div>'
+                    : '<div class="no-video">영상 파일이 없습니다.<br>videos 폴더에 영상을 추가해주세요.</div>';
                 return;
             }
 
             container.innerHTML = videoList.map(video => {
                 const bitrateText = formatBitrate(video.bitrate);
+                const encodedName = encodeURIComponent(video.name);
+                const thumbnailVersion = video.modified ? encodeURIComponent(video.modified) : '';
+                const hasThumbnail = Boolean(video.thumbnail_url);
+                const versionSuffix = hasThumbnail && thumbnailVersion
+                    ? `${video.thumbnail_url.includes('?') ? '&' : '?'}v=${thumbnailVersion}`
+                    : '';
+                const thumbContent = hasThumbnail
+                    ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="${escapeHtml(video.name)} 썸네일" loading="lazy">`
+                    : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
+                const watchedBadge = video.watched ? '<span class="watched-badge">👁️ 시청함</span>' : '';
+                const isActive = currentVideo === video.name;
+                const moveControl = moveTargets.length ? `
+                    <div class="video-actions" onclick="event.stopPropagation()">
+                        <select class="move-select"
+                                data-filename="${encodedName}"
+                                onchange="event.stopPropagation()"
+                                onclick="event.stopPropagation()">
+                            <option value="">이동할 경로 선택</option>
+                            ${moveTargets.map(target => `
+                                <option value="${escapeHtml(target.name)}" title="${escapeHtml(target.path || '')}">
+                                    ${escapeHtml(target.name)}
+                                </option>
+                            `).join('')}
+                        </select>
+                        <button class="move-btn"
+                                onclick="handleMoveClick(decodeURIComponent('${encodedName}'), event)">이동</button>
+                    </div>
+                ` : '';
+
                 return `
-                    <div class="video-item" onclick="playVideo('${video.name}')">
-                        <div class="video-item-name">${video.name}</div>
-                        <div class="video-item-info">
-                            폴더: ${video.folder || 'Unknown'}<br>
-                            크기: ${formatFileSize(video.size)}<br>
-                            수정일: ${formatDate(video.modified)}<br>
-                            ${video.video_codec_info ? `영상 코덱: ${video.video_codec_info}<br>` : ''}
-                            ${video.audio_codec_info ? `오디오 코덱: ${video.audio_codec_info}<br>` : ''}
-                            ${bitrateText ? `총 비트레이트: ${bitrateText}` : ''}
+                    <div class="video-item ${isActive ? 'active' : ''}"
+                         data-filename="${encodedName}"
+                         onclick="playVideo(decodeURIComponent('${encodedName}'), event)">
+                        <div class="video-thumb">${thumbContent}</div>
+                        <div class="video-meta">
+                            <div class="video-item-header">
+                                <div class="video-item-name">${escapeHtml(video.name)}</div>
+                                ${watchedBadge}
+                            </div>
+                            <div class="video-item-info">
+                                폴더: ${escapeHtml(video.folder || 'Unknown')}<br>
+                                크기: ${formatFileSize(video.size)}<br>
+                                수정일: ${formatDate(video.modified)}<br>
+                                ${video.video_codec_info ? `영상 코덱: ${escapeHtml(video.video_codec_info)}<br>` : ''}
+                                ${video.audio_codec_info ? `오디오 코덱: ${escapeHtml(video.audio_codec_info)}<br>` : ''}
+                                ${bitrateText ? `총 비트레이트: ${bitrateText}` : ''}
+                            </div>
+                            <button class="delete-btn"
+                                    onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
+                            ${moveControl}
                         </div>
-                        <button class="delete-btn" onclick="deleteVideo('${video.name}', event)">삭제</button>
                     </div>
                 `;
             }).join('');
+
+            scheduleThumbnailRefresh();
+        }
+
+        function scheduleThumbnailRefresh() {
+            if (thumbnailRefreshHandle) {
+                clearTimeout(thumbnailRefreshHandle);
+            }
+
+            const pending = videos.some(video => video.thumbnail_pending);
+            if (!pending) {
+                thumbnailRefreshHandle = null;
+                return;
+            }
+
+            thumbnailRefreshHandle = setTimeout(() => {
+                loadVideos({ skipLoader: true, includeMeta: false });
+            }, 4000);
+        }
+
+        function handleMoveClick(filename, evt) {
+            evt.stopPropagation();
+            const container = evt.currentTarget.closest('.video-item');
+            const select = container ? container.querySelector('.move-select') : null;
+            if (!select || !select.value) {
+                alert('이동할 경로를 선택해주세요.');
+                return;
+            }
+            moveVideoRequest(filename, select.value, select);
+        }
+
+        async function moveVideoRequest(filename, targetName, selectEl) {
+            try {
+                selectEl.disabled = true;
+                const response = await fetch('/api/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, target: targetName })
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    alert('영상이 이동되었습니다.');
+                    if (currentVideo === filename) {
+                        videoPlayer.pause();
+                        videoSource.src = '';
+                        currentVideo = null;
+                        document.getElementById('infoPanel').style.display = 'none';
+                    }
+                    await loadVideos();
+                } else {
+                    alert('이동 실패: ' + (result.error || '알 수 없는 오류'));
+                }
+            } catch (error) {
+                alert('이동 중 오류가 발생했습니다.');
+                console.error('Error moving video:', error);
+            } finally {
+                selectEl.disabled = false;
+            }
         }
 
         // 영상 재생
-        function playVideo(filename) {
+        function playVideo(filename, evt) {
             currentVideo = filename;
+
+            if (silentPlaylistEnabled && silentPlaylist.length > 0) {
+                const queueIndex = silentPlaylist.indexOf(filename);
+                if (queueIndex !== -1) {
+                    silentPlaylistIndex = queueIndex;
+                }
+            }
 
             // 기존 HLS 인스턴스 정리
             if (hls) {
@@ -794,7 +1203,9 @@
                 if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
                     videoSource.src = hlsUrl;
                     videoPlayer.load();
+                    applySilentAudioState();
                     videoPlayer.play();
+                    videoPlayer.playbackRate = currentPlaybackSpeed;
                 }
                 // 다른 브라우저는 HLS.js 사용
                 else if (Hls.isSupported()) {
@@ -809,7 +1220,9 @@
                     hls.attachMedia(videoPlayer);
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        applySilentAudioState();
                         videoPlayer.play();
+                        videoPlayer.playbackRate = currentPlaybackSpeed;
                     });
 
                     hls.on(Hls.Events.ERROR, function(event, data) {
@@ -832,14 +1245,24 @@
 
                 videoSource.src = endpoint;
                 videoPlayer.load();
+                applySilentAudioState();
                 videoPlayer.play();
+                videoPlayer.playbackRate = currentPlaybackSpeed;
             }
 
             // 활성 상태 표시
             document.querySelectorAll('.video-item').forEach(item => {
                 item.classList.remove('active');
             });
-            event.currentTarget.classList.add('active');
+            if (evt && evt.currentTarget) {
+                evt.currentTarget.classList.add('active');
+            } else {
+                const encodedName = encodeURIComponent(filename);
+                const fallbackItem = document.querySelector(`.video-item[data-filename="${encodedName}"]`);
+                if (fallbackItem) {
+                    fallbackItem.classList.add('active');
+                }
+            }
 
             // 정보 패널 업데이트
             const video = videos.find(v => v.name === filename);
@@ -848,8 +1271,9 @@
                 document.getElementById('currentVideoName').textContent = filename;
 
                 let modeInfo = '';
-                if (hlsEnabled) modeInfo = ' | 📡 HLS 스트리밍 (iOS 최적화)';
-                else if (transcodeEnabled) modeInfo = ' | 📱 트랜스코딩 중 (iOS 호환)';
+                if (hlsEnabled) modeInfo += ' | 📡 HLS 스트리밍 (iOS 최적화)';
+                else if (transcodeEnabled) modeInfo += ' | 📱 트랜스코딩 중 (iOS 호환)';
+                if (silentPlaylistEnabled) modeInfo += ' | 🔇 무소음 전체재생';
 
                 document.getElementById('currentVideoInfo').textContent =
                     `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${modeInfo}`;
@@ -927,13 +1351,16 @@
 
         // 재생 속도 설정
         function setPlaybackSpeed(speed) {
+            currentPlaybackSpeed = speed;
             videoPlayer.playbackRate = speed;
+            updateSpeedButtonState();
+        }
 
-            // 활성 버튼 표시
+        function updateSpeedButtonState() {
             document.querySelectorAll('.speed-btn').forEach(btn => {
-                btn.classList.remove('active');
+                const btnSpeed = parseFloat(btn.dataset.speed);
+                btn.classList.toggle('active', btnSpeed === currentPlaybackSpeed);
             });
-            event.currentTarget.classList.add('active');
         }
 
         // HLS 스트리밍 토글
@@ -1002,6 +1429,13 @@
         function playVideoInternal(filename, seekTime = 0, autoPlay = false) {
             currentVideo = filename;
 
+            if (silentPlaylistEnabled && silentPlaylist.length > 0) {
+                const queueIndex = silentPlaylist.indexOf(filename);
+                if (queueIndex !== -1) {
+                    silentPlaylistIndex = queueIndex;
+                }
+            }
+
             // 기존 HLS 인스턴스 정리
             if (hls) {
                 hls.destroy();
@@ -1018,7 +1452,9 @@
                     videoPlayer.load();
 
                     videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                        applySilentAudioState();
                         videoPlayer.currentTime = seekTime;
+                        videoPlayer.playbackRate = currentPlaybackSpeed;
                         if (autoPlay) videoPlayer.play();
                         videoPlayer.removeEventListener('loadedmetadata', onLoad);
                     });
@@ -1036,8 +1472,10 @@
                     hls.attachMedia(videoPlayer);
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        applySilentAudioState();
                         videoPlayer.currentTime = seekTime;
                         if (autoPlay) videoPlayer.play();
+                        videoPlayer.playbackRate = currentPlaybackSpeed;
                     });
 
                     hls.on(Hls.Events.ERROR, function(event, data) {
@@ -1055,7 +1493,9 @@
                 videoPlayer.load();
 
                 videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                    applySilentAudioState();
                     videoPlayer.currentTime = seekTime;
+                    videoPlayer.playbackRate = currentPlaybackSpeed;
                     if (autoPlay) videoPlayer.play();
                     videoPlayer.removeEventListener('loadedmetadata', onLoad);
                 });
@@ -1065,8 +1505,9 @@
             const video = videos.find(v => v.name === currentVideo);
             if (video) {
                 let modeInfo = '';
-                if (hlsEnabled) modeInfo = ' | 📡 HLS 스트리밍 (iOS 최적화)';
-                else if (transcodeEnabled) modeInfo = ' | 📱 트랜스코딩 중 (iOS 호환)';
+                if (hlsEnabled) modeInfo += ' | 📡 HLS 스트리밍 (iOS 최적화)';
+                else if (transcodeEnabled) modeInfo += ' | 📱 트랜스코딩 중 (iOS 호환)';
+                if (silentPlaylistEnabled) modeInfo += ' | 🔇 무소음 전체재생';
 
                 document.getElementById('currentVideoInfo').textContent =
                     `크기: ${formatFileSize(video.size)} | 형식: ${video.extension}${modeInfo}`;
@@ -1116,10 +1557,110 @@
             });
         }
 
+        function setupSilentPlaylistSupport() {
+            videoPlayer.setAttribute('playsinline', '');
+            videoPlayer.setAttribute('webkit-playsinline', '');
+            videoPlayer.addEventListener('ended', handleSilentPlaylistProgress);
+            videoPlayer.addEventListener('loadedmetadata', applySilentAudioState);
+            videoPlayer.addEventListener('play', applySilentAudioState);
+            videoPlayer.addEventListener('volumechange', () => {
+                if (silentPlaylistEnabled) {
+                    applySilentAudioState();
+                }
+            });
+            updateSilentPlaylistButton();
+        }
+
+        function updateSilentPlaylistButton() {
+            const btn = document.getElementById('silentPlaylistBtn');
+            if (!btn) return;
+
+            if (silentPlaylistEnabled) {
+                btn.textContent = '🔇 무소음 전체재생: ON';
+                btn.style.background = '#ff6b6b';
+                btn.style.color = 'white';
+            } else {
+                btn.textContent = '🔇 무소음 전체재생: OFF';
+                btn.style.background = '#6c757d';
+                btn.style.color = 'white';
+            }
+        }
+
+        function applySilentAudioState() {
+            if (!silentPlaylistEnabled) return;
+            videoPlayer.muted = true;
+            videoPlayer.volume = 0;
+            videoPlayer.setAttribute('muted', '');
+        }
+
+        function rememberAudioState() {
+            previousAudioState = {
+                muted: videoPlayer.muted,
+                volume: videoPlayer.volume
+            };
+        }
+
+        function restoreAudioState() {
+            videoPlayer.muted = previousAudioState.muted ?? false;
+            videoPlayer.volume = previousAudioState.volume ?? 1;
+            if (!videoPlayer.muted) {
+                videoPlayer.removeAttribute('muted');
+            }
+        }
+
+        function toggleSilentPlaylist() {
+            if (silentPlaylistEnabled) {
+                stopSilentPlaylist();
+            } else {
+                startSilentPlaylist();
+            }
+        }
+
+        function startSilentPlaylist() {
+            if (!videos || videos.length === 0) {
+                alert('재생할 영상이 없습니다. 폴더를 선택하거나 영상을 추가해주세요.');
+                return;
+            }
+
+            silentPlaylist = videos.map(v => v.name);
+            if (silentPlaylist.length === 0) {
+                alert('재생할 영상이 없습니다. 필터를 확인해주세요.');
+                return;
+            }
+
+            rememberAudioState();
+            silentPlaylistEnabled = true;
+            updateSilentPlaylistButton();
+            applySilentAudioState();
+
+            const existingIndex = currentVideo ? silentPlaylist.indexOf(currentVideo) : -1;
+            silentPlaylistIndex = existingIndex >= 0 ? existingIndex : 0;
+            playVideo(silentPlaylist[silentPlaylistIndex]);
+        }
+
+        function stopSilentPlaylist() {
+            silentPlaylistEnabled = false;
+            silentPlaylist = [];
+            silentPlaylistIndex = -1;
+            restoreAudioState();
+            updateSilentPlaylistButton();
+        }
+
+        function handleSilentPlaylistProgress() {
+            if (!silentPlaylistEnabled) return;
+            if (silentPlaylistIndex + 1 >= silentPlaylist.length) {
+                stopSilentPlaylist();
+                return;
+            }
+
+            silentPlaylistIndex += 1;
+            playVideo(silentPlaylist[silentPlaylistIndex]);
+        }
+
         // 재생 기록 저장
         async function saveToHistory(filename) {
             try {
-                await fetch('/api/history', {
+                const response = await fetch('/api/history', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1129,7 +1670,10 @@
                         position: videoPlayer.currentTime
                     })
                 });
-                loadHistory();
+                if (response.ok) {
+                    setVideoWatched(filename);
+                    loadHistory();
+                }
             } catch (error) {
                 console.error('Error saving history:', error);
             }
@@ -1144,8 +1688,8 @@
                 if (history.length > 0) {
                     document.getElementById('historySection').style.display = 'block';
                     document.getElementById('historyList').innerHTML = history.slice(0, 5).map(item => `
-                        <div class="history-item" onclick="playVideo('${item.filename}')">
-                            ${item.filename}
+                        <div class="history-item" onclick="playVideo(decodeURIComponent('${encodeURIComponent(item.filename)}'), event)">
+                            ${escapeHtml(item.filename)}
                             <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
                                 ${formatDate(item.timestamp)}
                             </div>
@@ -1158,6 +1702,24 @@
             } catch (error) {
                 console.error('Error loading history:', error);
             }
+        }
+
+        function setVideoWatched(filename) {
+            const video = videos.find(v => v.name === filename);
+            if (video && !video.watched) {
+                video.watched = true;
+                displayVideos(videos);
+            }
+        }
+
+        function escapeHtml(value) {
+            if (value === undefined || value === null) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         // 파일 크기 포맷
