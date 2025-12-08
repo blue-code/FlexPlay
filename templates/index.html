@@ -978,6 +978,8 @@
         let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
+        let historyLoaded = false;
+        let historyLoading = null;
         let playbackHistory = new Map();
         let historySaveHandle = null;
         let pendingResumeTime = 0;
@@ -1482,7 +1484,7 @@
         }
 
         // 영상 재생
-        function playVideo(filename, evt) {
+        async function playVideo(filename, evt) {
             if (historySaveHandle) {
                 clearTimeout(historySaveHandle);
                 historySaveHandle = null;
@@ -1492,6 +1494,7 @@
                 savePlaybackPosition(true);
             }
 
+            await ensureHistoryReady();
             currentVideo = filename;
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
@@ -1753,7 +1756,7 @@
         }
 
         // 내부 재생 함수 (시간 복원 포함)
-        function playVideoInternal(filename, seekTime = 0, autoPlay = false) {
+        async function playVideoInternal(filename, seekTime = 0, autoPlay = false) {
             if (historySaveHandle) {
                 clearTimeout(historySaveHandle);
                 historySaveHandle = null;
@@ -1763,6 +1766,7 @@
                 savePlaybackPosition(true);
             }
 
+            await ensureHistoryReady();
             currentVideo = filename;
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
@@ -2027,6 +2031,16 @@
             }
         }
 
+        async function ensureHistoryReady() {
+            if (historyLoaded) return;
+            if (historyLoading) {
+                await historyLoading;
+                return;
+            }
+            historyLoading = loadHistory();
+            await historyLoading;
+        }
+
         // 재생 기록 불러오기
         async function loadHistory() {
             try {
@@ -2055,6 +2069,9 @@
                 }
             } catch (error) {
                 console.error('Error loading history:', error);
+            } finally {
+                historyLoaded = true;
+                historyLoading = null;
             }
         }
 
