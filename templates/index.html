@@ -1039,11 +1039,10 @@
                 const response = await fetch('/api/folders');
                 folders = await response.json();
 
+                const available = new Set(folders.map(f => f.name));
                 if (!preserveSelection) {
-                    selectedFolders.clear();
-                    folders.forEach(folder => selectedFolders.add(folder.name));
+                    selectedFolders.clear(); // 기본값: 아무 폴더도 선택하지 않음
                 } else {
-                    const available = new Set(folders.map(f => f.name));
                     Array.from(selectedFolders).forEach(name => {
                         if (!available.has(name)) {
                             selectedFolders.delete(name);
