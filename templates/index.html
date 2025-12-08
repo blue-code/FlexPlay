@@ -258,7 +258,7 @@
             transition: all 0.3s;
             border-left: 4px solid transparent;
             display: grid;
-            grid-template-columns: auto 150px 1fr;
+            grid-template-columns: 28px 150px 1fr;
             gap: 12px;
             align-items: stretch;
         }
@@ -279,12 +279,18 @@
             color: #222;
             margin-bottom: 4px;
             word-break: break-word;
+            line-height: 1.25;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            font-size: 0.95em;
         }
 
         .video-meta {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
 
         .video-select {
@@ -315,7 +321,8 @@
 
         .meta-subline {
             display: flex;
-            gap: 8px;
+            gap: 6px;
+            row-gap: 4px;
             flex-wrap: wrap;
             font-size: 0.85em;
             color: #555;
@@ -325,12 +332,12 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 8px;
+            padding: 3px 6px;
             background: #eef2ff;
             color: #30336b;
             border-radius: 999px;
             font-weight: 600;
-            font-size: 0.8em;
+            font-size: 0.78em;
         }
 
         .info-chip .label {
@@ -342,11 +349,11 @@
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            padding: 3px 8px;
+            padding: 3px 6px;
             background: #f4f4f5;
             color: #444;
             border-radius: 8px;
-            font-size: 0.82em;
+            font-size: 0.78em;
             font-weight: 600;
         }
 
@@ -724,18 +731,28 @@
             }
 
             .video-item {
-                grid-template-columns: auto 120px 1fr;
+                grid-template-columns: 26px 110px 1fr;
                 gap: 10px;
+                padding: 10px;
             }
 
             .video-thumb {
-                width: 120px;
-                height: 72px;
+                width: 110px;
+                height: 66px;
             }
 
             .video-actions-row {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+
+            .video-item-name {
+                font-size: 0.9em;
+            }
+
+            .meta-subline {
+                font-size: 0.82em;
+                gap: 6px;
             }
         }
 
