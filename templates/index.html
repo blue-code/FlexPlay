@@ -375,6 +375,13 @@
             white-space: nowrap;
         }
 
+        .thumb-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: stretch;
+        }
+
         .video-thumb {
             width: 150px;
             height: 90px;
@@ -386,6 +393,22 @@
             align-items: center;
             justify-content: center;
             box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+
+        .thumb-caption {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            font-size: 0.78em;
+            color: #444;
+        }
+
+        .thumb-chip {
+            background: #eef2ff;
+            color: #1f2a4d;
+            padding: 3px 6px;
+            border-radius: 8px;
+            font-weight: 600;
         }
 
         .video-thumb img {
@@ -754,6 +777,11 @@
                 font-size: 0.82em;
                 gap: 6px;
             }
+
+            .thumb-caption {
+                font-size: 0.75em;
+                gap: 4px;
+            }
         }
 
         .loading {
@@ -797,7 +825,7 @@
             <div class="video-list-container">
                 <div class="video-list-header">
                     <h2>영상 목록</h2>
-                    <button class="refresh-btn" onclick="loadVideos()">새로고침</button>
+                    <button class="refresh-btn" onclick="refreshVideoList()">새로고침</button>
                 </div>
 
                 <!-- 폴더 필터 -->
@@ -1005,21 +1033,38 @@
         }
 
         // 폴더 목록 불러오기
-        async function loadFolders() {
+        async function loadFolders(options = {}) {
+            const { preserveSelection = false, skipVideos = false } = options;
             try {
                 const response = await fetch('/api/folders');
                 folders = await response.json();
 
-                // 모든 폴더를 기본적으로 선택
-                folders.forEach(folder => selectedFolders.add(folder.name));
+                if (!preserveSelection) {
+                    selectedFolders.clear();
+                    folders.forEach(folder => selectedFolders.add(folder.name));
+                } else {
+                    const available = new Set(folders.map(f => f.name));
+                    Array.from(selectedFolders).forEach(name => {
+                        if (!available.has(name)) {
+                            selectedFolders.delete(name);
+                        }
+                    });
+                }
 
                 displayFolders();
-                loadVideos();
+                if (!skipVideos) {
+                    loadVideos();
+                }
             } catch (error) {
                 document.getElementById('folderList').innerHTML =
                     '<div class="error" style="font-size: 0.85em;">폴더 목록을 불러오는데 실패했습니다.</div>';
                 console.error('Error loading folders:', error);
             }
+        }
+
+        async function refreshVideoList() {
+            await loadFolders({ preserveSelection: true, skipVideos: true });
+            await loadVideos();
         }
 
         // 폴더 목록 표시
@@ -1374,7 +1419,14 @@
                                    aria-label="영상 선택"
                                    onchange="toggleVideoSelection('${encodedName}', event)">
                         </div>
-                        <div class="video-thumb">${thumbContent}</div>
+                        <div class="thumb-stack">
+                            <div class="video-thumb">${thumbContent}</div>
+                            <div class="thumb-caption">
+                                ${extensionLabel ? `<span class="thumb-chip">${extensionLabel}</span>` : ''}
+                                ${bitrateText ? `<span class="thumb-chip">${bitrateText}</span>` : ''}
+                                ${video.video_codec_info ? `<span class="thumb-chip">🎞 ${escapeHtml(video.video_codec_info)}</span>` : ''}
+                            </div>
+                        </div>
                         <div class="video-meta">
                             <div class="video-item-header meta-top">
                                 <div>
