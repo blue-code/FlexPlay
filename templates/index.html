@@ -2100,10 +2100,13 @@
                 return;
             }
 
-            const safeDuration = duration || saved + 1;
-            if (saved < safeDuration - 1) {
+            if (!duration || !isFinite(duration)) {
                 pendingResumeTime = saved;
+                return;
             }
+
+            const safeDuration = Math.max(duration - 0.5, HISTORY_MIN_POSITION);
+            pendingResumeTime = Math.min(saved, safeDuration);
         }
 
         function resolveStartTime(fallbackSeconds = 0) {
