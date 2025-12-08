@@ -931,6 +931,12 @@
         let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
+        let playbackHistory = new Map();
+        let historySaveHandle = null;
+        let pendingResumeTime = 0;
+        const LONG_VIDEO_THRESHOLD = 600; // 10 minutes
+        const HISTORY_SAVE_INTERVAL_MS = 15000;
+        const HISTORY_MIN_POSITION = 5;
 
         // 구간 편집 관련 변수
         let editSegments = [];  // 삭제할 구간들 [{start: 0, end: 10}, ...]
@@ -946,6 +952,7 @@
             setupKeyboardShortcuts();
             setupVideoErrorHandler();
             setupSilentPlaylistSupport();
+            setupPlaybackStateHandlers();
             updateSpeedButtonState();
         });
 
@@ -971,6 +978,13 @@
                     }
                 }
             });
+        }
+
+        function setupPlaybackStateHandlers() {
+            videoPlayer.addEventListener('timeupdate', handleProgressAutoSave);
+            videoPlayer.addEventListener('pause', () => savePlaybackPosition(true));
+            videoPlayer.addEventListener('ended', () => savePlaybackPosition(true));
+            window.addEventListener('beforeunload', () => savePlaybackPosition(true));
         }
 
         // 폴더 목록 불러오기
@@ -1283,15 +1297,13 @@
                 const movedCount = summary.moved ?? moved.length;
                 const requested = summary.requested ?? selectedVideoNames.size;
 
-                let message = `총 ${requested}개 중 ${movedCount}개 이동 완료`;
-                if (failed.length > 0) {
-                    message += `\n실패: ${failed.map(f => `${f.filename} (${f.error || '오류'})`).join(', ')}`;
+                if (failed.length > 0 || movedCount !== requested) {
+                    alert(`일부 이동 실패: ${failed.map(f => `${f.filename} (${f.error || '오류'})`).join(', ')}`);
                     selectedVideoNames = new Set(failed.map(f => f.filename));
                 } else {
                     selectedVideoNames.clear();
                 }
 
-                alert(message);
                 updateBulkSelectionInfo();
                 await loadVideos();
             } catch (error) {
@@ -1401,6 +1413,15 @@
 
         // 영상 재생
         function playVideo(filename, evt) {
+            if (historySaveHandle) {
+                clearTimeout(historySaveHandle);
+                historySaveHandle = null;
+            }
+
+            if (currentVideo && currentVideo !== filename) {
+                savePlaybackPosition(true);
+            }
+
             currentVideo = filename;
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
@@ -1409,6 +1430,8 @@
                     silentPlaylistIndex = queueIndex;
                 }
             }
+
+            prepareResumeForVideo(filename);
 
             // 기존 HLS 인스턴스 정리
             if (hls) {
@@ -1425,8 +1448,15 @@
                     videoSource.src = hlsUrl;
                     videoPlayer.load();
                     applySilentAudioState();
-                    videoPlayer.play();
-                    videoPlayer.playbackRate = currentPlaybackSpeed;
+                    videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                        const startTime = resolveStartTime();
+                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
+                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
+                        }
+                        videoPlayer.playbackRate = currentPlaybackSpeed;
+                        videoPlayer.play();
+                        videoPlayer.removeEventListener('loadedmetadata', onLoad);
+                    });
                 }
                 // 다른 브라우저는 HLS.js 사용
                 else if (Hls.isSupported()) {
@@ -1441,6 +1471,10 @@
                     hls.attachMedia(videoPlayer);
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        const startTime = resolveStartTime();
+                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
+                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
+                        }
                         applySilentAudioState();
                         videoPlayer.play();
                         videoPlayer.playbackRate = currentPlaybackSpeed;
@@ -1467,8 +1501,15 @@
                 videoSource.src = endpoint;
                 videoPlayer.load();
                 applySilentAudioState();
-                videoPlayer.play();
-                videoPlayer.playbackRate = currentPlaybackSpeed;
+                videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                    const startTime = resolveStartTime();
+                    if (startTime > 0 && !isNaN(videoPlayer.duration)) {
+                        videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
+                    }
+                    videoPlayer.playbackRate = currentPlaybackSpeed;
+                    videoPlayer.play();
+                    videoPlayer.removeEventListener('loadedmetadata', onLoad);
+                });
             }
 
             // 활성 상태 표시
@@ -1503,9 +1544,6 @@
             // 구간 편집 섹션 표시 및 초기화
             document.getElementById('editSection').style.display = 'block';
             resetEditState();
-
-            // 재생 기록 저장
-            saveToHistory(filename);
         }
 
         // 영상 삭제
@@ -1531,8 +1569,6 @@
                     // 목록 새로고침 (await로 확실하게 완료 대기)
                     await loadVideos();
                     await loadHistory();
-
-                    alert('영상이 삭제되었습니다.');
                 } else {
                     alert('삭제 실패: ' + result.error);
                 }
@@ -1648,6 +1684,15 @@
 
         // 내부 재생 함수 (시간 복원 포함)
         function playVideoInternal(filename, seekTime = 0, autoPlay = false) {
+            if (historySaveHandle) {
+                clearTimeout(historySaveHandle);
+                historySaveHandle = null;
+            }
+
+            if (currentVideo && currentVideo !== filename) {
+                savePlaybackPosition(true);
+            }
+
             currentVideo = filename;
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
@@ -1656,6 +1701,8 @@
                     silentPlaylistIndex = queueIndex;
                 }
             }
+
+            prepareResumeForVideo(filename);
 
             // 기존 HLS 인스턴스 정리
             if (hls) {
@@ -1674,7 +1721,10 @@
 
                     videoPlayer.addEventListener('loadedmetadata', function onLoad() {
                         applySilentAudioState();
-                        videoPlayer.currentTime = seekTime;
+                        const startTime = resolveStartTime(seekTime);
+                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
+                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
+                        }
                         videoPlayer.playbackRate = currentPlaybackSpeed;
                         if (autoPlay) videoPlayer.play();
                         videoPlayer.removeEventListener('loadedmetadata', onLoad);
@@ -1694,7 +1744,10 @@
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
                         applySilentAudioState();
-                        videoPlayer.currentTime = seekTime;
+                        const startTime = resolveStartTime(seekTime);
+                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
+                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
+                        }
                         if (autoPlay) videoPlayer.play();
                         videoPlayer.playbackRate = currentPlaybackSpeed;
                     });
@@ -1715,7 +1768,10 @@
 
                 videoPlayer.addEventListener('loadedmetadata', function onLoad() {
                     applySilentAudioState();
-                    videoPlayer.currentTime = seekTime;
+                    const startTime = resolveStartTime(seekTime);
+                    if (startTime > 0 && !isNaN(videoPlayer.duration)) {
+                        videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
+                    }
                     videoPlayer.playbackRate = currentPlaybackSpeed;
                     if (autoPlay) videoPlayer.play();
                     videoPlayer.removeEventListener('loadedmetadata', onLoad);
@@ -1879,21 +1935,22 @@
         }
 
         // 재생 기록 저장
-        async function saveToHistory(filename) {
+        async function saveToHistory(filename, position) {
             try {
+                const payload = {
+                    filename: filename,
+                    position: typeof position === 'number' ? position : videoPlayer.currentTime
+                };
+                playbackHistory.set(filename, payload.position);
                 const response = await fetch('/api/history', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        filename: filename,
-                        position: videoPlayer.currentTime
-                    })
+                    body: JSON.stringify(payload)
                 });
                 if (response.ok) {
                     setVideoWatched(filename);
-                    loadHistory();
                 }
             } catch (error) {
                 console.error('Error saving history:', error);
@@ -1905,6 +1962,12 @@
             try {
                 const response = await fetch('/api/history');
                 const history = await response.json();
+
+                playbackHistory = new Map(
+                    history
+                        .filter(item => item && item.filename)
+                        .map(item => [item.filename, Number(item.position || 0)])
+                );
 
                 if (history.length > 0) {
                     document.getElementById('historySection').style.display = 'block';
@@ -1931,6 +1994,61 @@
                 video.watched = true;
                 displayVideos(videos);
             }
+        }
+
+        function getResumePosition(filename) {
+            const stored = playbackHistory.get(filename) || 0;
+            return stored >= HISTORY_MIN_POSITION ? stored : 0;
+        }
+
+        function prepareResumeForVideo(filename) {
+            pendingResumeTime = 0;
+            const video = videos.find(v => v.name === filename);
+            const duration = video ? Number(video.duration || 0) : 0;
+
+            const saved = getResumePosition(filename);
+            if (!saved) return;
+
+            if (duration && duration < LONG_VIDEO_THRESHOLD) {
+                return;
+            }
+
+            const safeDuration = duration || saved + 1;
+            if (saved < safeDuration - 1) {
+                pendingResumeTime = saved;
+            }
+        }
+
+        function resolveStartTime(fallbackSeconds = 0) {
+            const base = typeof fallbackSeconds === 'number' ? fallbackSeconds : 0;
+            const startTime = Math.max(base, pendingResumeTime || 0);
+            pendingResumeTime = 0;
+            return startTime;
+        }
+
+        function handleProgressAutoSave() {
+            if (!currentVideo) return;
+            if (!videoPlayer.duration || videoPlayer.duration < LONG_VIDEO_THRESHOLD) return;
+            if (videoPlayer.currentTime < HISTORY_MIN_POSITION) return;
+            if (historySaveHandle) return;
+
+            historySaveHandle = setTimeout(() => {
+                savePlaybackPosition(false);
+                historySaveHandle = null;
+            }, HISTORY_SAVE_INTERVAL_MS);
+        }
+
+        function savePlaybackPosition(force = false) {
+            if (!currentVideo) return;
+            const duration = videoPlayer.duration || 0;
+            if (duration < LONG_VIDEO_THRESHOLD) {
+                return;
+            }
+            const position = videoPlayer.currentTime || 0;
+            if (!force && position < HISTORY_MIN_POSITION) {
+                return;
+            }
+            saveToHistory(currentVideo, position);
         }
 
         function escapeHtml(value) {
@@ -1970,13 +2088,6 @@
             const date = new Date(dateString);
             return date.toLocaleString('ko-KR');
         }
-
-        // 영상 재생 위치 저장 (5초마다)
-        setInterval(() => {
-            if (currentVideo && !videoPlayer.paused) {
-                saveToHistory(currentVideo);
-            }
-        }, 5000);
 
         // ==================== 구간 편집 기능 ====================
 
