@@ -2098,7 +2098,7 @@
 
         function handleProgressAutoSave() {
             if (!currentVideo) return;
-            if (!videoPlayer.duration || videoPlayer.duration < LONG_VIDEO_THRESHOLD) return;
+            if (videoPlayer.duration && videoPlayer.duration < LONG_VIDEO_THRESHOLD) return;
             if (videoPlayer.currentTime < HISTORY_MIN_POSITION) return;
             if (historySaveHandle) return;
 
@@ -2111,7 +2111,7 @@
         function savePlaybackPosition(force = false) {
             if (!currentVideo) return;
             const duration = videoPlayer.duration || 0;
-            if (duration < LONG_VIDEO_THRESHOLD) {
+            if (duration && duration < LONG_VIDEO_THRESHOLD) {
                 return;
             }
             const position = videoPlayer.currentTime || 0;
