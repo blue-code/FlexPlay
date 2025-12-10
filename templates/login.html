@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlexPlay 로그인</title>
+    <style>
+        :root {
+            --bg: radial-gradient(circle at 20% 20%, #1e3c72, transparent 35%), radial-gradient(circle at 80% 0%, #2a5298, transparent 25%), #0f172a;
+            --card: rgba(15, 23, 42, 0.8);
+            --accent: #7c3aed;
+            --accent-2: #06b6d4;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg);
+            color: #e2e8f0;
+            font-family: "Segoe UI", sans-serif;
+            padding: 20px;
+        }
+        .card {
+            width: min(420px, 100%);
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 1.5rem;
+            letter-spacing: -0.02em;
+        }
+        p.sub {
+            margin: 0 0 20px;
+            color: #94a3b8;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #cbd5e1;
+            font-size: 0.95rem;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            color: #e2e8f0;
+            font-size: 1rem;
+            outline: none;
+            transition: border 0.2s, box-shadow 0.2s;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+        }
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 14px;
+            gap: 12px;
+        }
+        .remember {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            color: #cbd5e1;
+        }
+        .actions {
+            margin-top: 22px;
+        }
+        button {
+            width: 100%;
+            border: none;
+            padding: 14px 16px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            color: white;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(124, 58, 237, 0.35);
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 32px rgba(124, 58, 237, 0.45);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .error {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(220, 38, 38, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.4);
+            color: #fecdd3;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>FlexPlay 로그인</h1>
+        <p class="sub">rockus 계정으로 접속하세요. 로그인 정보를 기억할 수도 있습니다.</p>
+        <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
+            <div class="field">
+                <label for="username">아이디</label>
+                <input type="text" id="username" name="username" placeholder="rockus" autocomplete="username" required>
+            </div>
+            <div class="field" style="margin-top: 14px;">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password" placeholder="sam927" autocomplete="current-password" required>
+            </div>
+            <div class="row">
+                <label class="remember">
+                    <input type="checkbox" name="remember">
+                    로그인 상태 유지
+                </label>
+                <div style="font-size: 0.9rem; color: #94a3b8;">계정: rockus / sam927</div>
+            </div>
+            <div class="actions">
+                <button type="submit">로그인</button>
+            </div>
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+        </form>
+    </div>
+</body>
+</html>

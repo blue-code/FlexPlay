@@ -8,7 +8,18 @@ import shutil
 import platform
 import hashlib
 from pathlib import Path
-from flask import Flask, render_template, jsonify, request, send_file, Response, stream_with_context
+from flask import (
+    Flask,
+    render_template,
+    jsonify,
+    request,
+    send_file,
+    Response,
+    stream_with_context,
+    session,
+    redirect,
+    url_for
+)
 from urllib.parse import unquote
 import mimetypes
 from datetime import datetime, timedelta
@@ -16,6 +27,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 5000 * 1024 * 1024  # 5GB max file size
+app.secret_key = os.environ.get('FLEXPLAY_SECRET_KEY', 'change-me-for-production')
+app.permanent_session_lifetime = timedelta(days=30)
 
 MIN_SEGMENT_DURATION = 0.05  # seconds; ignore shorter leftovers to avoid zero-length cuts
 
@@ -557,6 +570,56 @@ def save_history(history):
 def index():
     """메인 페이지"""
     return render_template('index.html')
+
+
+def is_logged_in():
+    return session.get('user') == 'rockus'
+
+
+@app.before_request
+def require_login():
+    """단순 세션 기반 접근 제어"""
+    open_endpoints = {'login', 'logout', 'static'}
+    if request.endpoint in open_endpoints:
+        return
+
+    # 허용: favicon 및 헬스체크 비슷한 경로
+    if request.path.startswith('/static/') or request.path == '/favicon.ico':
+        return
+
+    if is_logged_in():
+        return
+
+    # API 요청은 401 반환, 페이지는 로그인 페이지로 리디렉션
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    return redirect(url_for('login', next=request.path))
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+        remember = request.form.get('remember') == 'on'
+
+        if username == 'rockus' and password == 'sam927':
+            session['user'] = username
+            session.permanent = remember
+            next_url = request.args.get('next') or url_for('index')
+            return redirect(next_url)
+        else:
+            error = '아이디 또는 비밀번호가 올바르지 않습니다.'
+
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 
 @app.route('/api/folders')
