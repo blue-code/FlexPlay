@@ -39,6 +39,12 @@ HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'history.json')
 media_info_cache = {}
 FFMPEG_AVAILABLE = shutil.which('ffmpeg') is not None
 FFMPEG_WARNING_EMITTED = False
+LOGIN_USERNAME = 'guest'
+LOGIN_PASSWORD = 'sam927'
+FAILED_ATTEMPT_LIMIT = 5
+failed_attempt_count = 0
+last_failed_ip = None
+login_locked = False
 
 # 썸네일 생성 상태 추적
 thumbnail_jobs = set()
@@ -599,19 +605,35 @@ def require_login():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
+    global failed_attempt_count, last_failed_ip, login_locked
+
+    if login_locked:
+        return render_template('login.html', locked=True, locked_ip=last_failed_ip, limit=FAILED_ATTEMPT_LIMIT)
 
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
         remember = request.form.get('remember') == 'on'
 
-        if username == 'rockus' and password == 'sam927':
+        if username == LOGIN_USERNAME and password == LOGIN_PASSWORD:
             session['user'] = username
             session.permanent = remember
+            failed_attempt_count = 0
+            last_failed_ip = request.remote_addr
             next_url = request.args.get('next') or url_for('index')
             return redirect(next_url)
         else:
             error = '아이디 또는 비밀번호가 올바르지 않습니다.'
+            failed_attempt_count += 1
+            last_failed_ip = request.remote_addr
+            if failed_attempt_count >= FAILED_ATTEMPT_LIMIT:
+                login_locked = True
+                return render_template(
+                    'login.html',
+                    locked=True,
+                    locked_ip=last_failed_ip,
+                    limit=FAILED_ATTEMPT_LIMIT
+                )
 
     return render_template('login.html', error=error)
 
