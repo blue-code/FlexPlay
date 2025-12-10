@@ -123,22 +123,21 @@
                 마지막 실패 IP: {{ locked_ip or '알 수 없음' }}
             </div>
         {% else %}
-            <p class="sub">guest 계정으로 접속하세요. 로그인 정보를 기억할 수도 있습니다.</p>
+            <p class="sub">로그인 정보를 입력하세요. 로그인 상태를 저장할 수도 있습니다.</p>
             <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
                 <div class="field">
                     <label for="username">아이디</label>
-                    <input type="text" id="username" name="username" placeholder="guest" autocomplete="username" required>
+                    <input type="text" id="username" name="username" autocomplete="username" required>
                 </div>
                 <div class="field" style="margin-top: 14px;">
                     <label for="password">비밀번호</label>
-                    <input type="password" id="password" name="password" placeholder="sam927" autocomplete="current-password" required>
+                    <input type="password" id="password" name="password" autocomplete="current-password" required>
                 </div>
                 <div class="row">
                     <label class="remember">
                         <input type="checkbox" name="remember">
                         로그인 상태 유지
                     </label>
-                    <div style="font-size: 0.9rem; color: #94a3b8;">계정: guest / sam927</div>
                 </div>
                 <div class="actions">
                     <button type="submit">로그인</button>
