@@ -579,7 +579,7 @@ def index():
 
 
 def is_logged_in():
-    return session.get('user') == 'rockus'
+    return session.get('user') == LOGIN_USERNAME
 
 
 @app.before_request
