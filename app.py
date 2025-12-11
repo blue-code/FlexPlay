@@ -1233,8 +1233,15 @@ def get_thumbnail(filename):
     return jsonify({'error': 'Thumbnail not found'}), 404
 
 
-def get_edit_codec_args():
-    """편집 시 사용할 비디오 코덱 인코딩 옵션 (맥은 GPU 활용)"""
+def get_edit_codec_args(width=None, height=None):
+    """편집 시 사용할 비디오 코덱 인코딩 옵션 (맥은 GPU 활용)
+
+    width/height 제공 시 원본 해상도(짝수) 유지.
+    """
+    scale_w = f"trunc({int(width)}/2)*2" if width else "trunc(iw/2)*2"
+    scale_h = f"trunc({int(height)}/2)*2" if height else "trunc(ih/2)*2"
+    scale_filter = ['-vf', f'scale={scale_w}:{scale_h}']
+
     if platform.system() == 'Darwin':
         primary = [
             '-c:v', 'hevc_videotoolbox',
@@ -1243,15 +1250,13 @@ def get_edit_codec_args():
             '-maxrate', '6M',
             '-bufsize', '12M',
             '-pix_fmt', 'yuv420p',
-            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
-        ]
+        ] + scale_filter
         fallback = [
             '-c:v', 'libx265',
             '-preset', 'medium',
             '-crf', '22',
             '-pix_fmt', 'yuv420p',
-            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
-        ]
+        ] + scale_filter
         return primary, fallback
 
     primary = [
@@ -1259,8 +1264,7 @@ def get_edit_codec_args():
         '-preset', 'medium',
         '-crf', '22',
         '-pix_fmt', 'yuv420p',
-        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
-    ]
+    ] + scale_filter
     return primary, None
 
 
@@ -1297,7 +1301,25 @@ def process_video_edit(task_id, video_path, segments, output_path):
         temp_files = []
         temp_dir = os.path.dirname(output_path)
 
-        codec_args, fallback_codec_args = get_edit_codec_args()
+        # 해상도 조회 (원본 유지 목적)
+        probe_cmd = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'json',
+            video_path
+        ]
+        probe = subprocess.run(probe_cmd, capture_output=True, text=True)
+        width = height = None
+        try:
+            info = json.loads(probe.stdout or '{}')
+            stream = (info.get('streams') or [{}])[0]
+            width = stream.get('width')
+            height = stream.get('height')
+        except Exception:
+            width = height = None
+
+        codec_args, fallback_codec_args = get_edit_codec_args(width, height)
 
         for i, segment in enumerate(keep_segments):
             # 각 구간 추출
@@ -1383,7 +1405,24 @@ def process_video_extract(task_id, video_path, segments, output_dir):
         edit_tasks[task_id]['progress'] = 0
         edit_tasks[task_id]['outputs'] = []
 
-        codec_args, fallback_codec_args = get_edit_codec_args()
+        probe_cmd = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'json',
+            video_path
+        ]
+        probe = subprocess.run(probe_cmd, capture_output=True, text=True)
+        width = height = None
+        try:
+            info = json.loads(probe.stdout or '{}')
+            stream = (info.get('streams') or [{}])[0]
+            width = stream.get('width')
+            height = stream.get('height')
+        except Exception:
+            width = height = None
+
+        codec_args, fallback_codec_args = get_edit_codec_args(width, height)
         base_name, _ = os.path.splitext(os.path.basename(video_path))
         valid_segments = [s for s in segments if s.get('end', 0) > s.get('start', 0)]
         total = len(valid_segments)
