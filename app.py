@@ -1234,14 +1234,7 @@ def get_thumbnail(filename):
 
 
 def get_edit_codec_args(width=None, height=None):
-    """편집 시 사용할 비디오 코덱 인코딩 옵션 (맥은 GPU 활용)
-
-    width/height 제공 시 원본 해상도(짝수) 유지.
-    """
-    scale_w = f"trunc({int(width)}/2)*2" if width else "trunc(iw/2)*2"
-    scale_h = f"trunc({int(height)}/2)*2" if height else "trunc(ih/2)*2"
-    scale_filter = ['-vf', f'scale={scale_w}:{scale_h}']
-
+    """편집 시 사용할 비디오 코덱 인코딩 옵션 (맥은 GPU 활용)"""
     if platform.system() == 'Darwin':
         primary = [
             '-c:v', 'hevc_videotoolbox',
@@ -1250,13 +1243,13 @@ def get_edit_codec_args(width=None, height=None):
             '-maxrate', '6M',
             '-bufsize', '12M',
             '-pix_fmt', 'yuv420p',
-        ] + scale_filter
+        ]
         fallback = [
             '-c:v', 'libx265',
             '-preset', 'medium',
             '-crf', '22',
             '-pix_fmt', 'yuv420p',
-        ] + scale_filter
+        ]
         return primary, fallback
 
     primary = [
@@ -1264,8 +1257,69 @@ def get_edit_codec_args(width=None, height=None):
         '-preset', 'medium',
         '-crf', '22',
         '-pix_fmt', 'yuv420p',
-    ] + scale_filter
+    ]
     return primary, None
+
+
+def probe_video_geometry(video_path):
+    """영상의 width/height/rotation 정보를 ffprobe로 조회"""
+    info = {'width': None, 'height': None, 'rotation': 0}
+    probe_cmd = [
+        'ffprobe', '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=width,height,side_data_list:stream_tags=rotate',
+        '-of', 'json',
+        video_path
+    ]
+    try:
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout or '{}')
+        stream = (data.get('streams') or [{}])[0]
+        info['width'] = stream.get('width')
+        info['height'] = stream.get('height')
+        rotate_tag = stream.get('tags', {}).get('rotate')
+
+        rotation = 0
+        try:
+            rotation = int(rotate_tag)
+        except Exception:
+            rotation = 0
+
+        # side_data_list displaymatrix 처리
+        side_data = stream.get('side_data_list') or []
+        for entry in side_data:
+            if entry.get('rotation') is not None:
+                try:
+                    rotation = int(entry.get('rotation'))
+                except Exception:
+                    pass
+        info['rotation'] = rotation
+    except Exception:
+        pass
+    return info
+
+
+def build_filter_args(geometry):
+    """해상도/회전 정보를 기반으로 필터 체인 생성"""
+    width = geometry.get('width')
+    height = geometry.get('height')
+    rotation = geometry.get('rotation', 0) or 0
+
+    scale_w = f"trunc({int(width)}/2)*2" if width else "trunc(iw/2)*2"
+    scale_h = f"trunc({int(height)}/2)*2" if height else "trunc(ih/2)*2"
+
+    filters = [f"scale={scale_w}:{scale_h}"]
+
+    normalized_rotation = rotation % 360
+    if normalized_rotation in (90, 270):
+        transpose_mode = 1 if normalized_rotation == 90 else 2
+        filters.append(f"transpose={transpose_mode}")
+    elif normalized_rotation == 180:
+        filters.append("hflip,vflip")
+
+    filters.append("setsar=1")
+
+    return ['-vf', ','.join(filters), '-metadata:s:v:0', 'rotate=0']
 
 
 def process_video_edit(task_id, video_path, segments, output_path):
@@ -1301,25 +1355,10 @@ def process_video_edit(task_id, video_path, segments, output_path):
         temp_files = []
         temp_dir = os.path.dirname(output_path)
 
-        # 해상도 조회 (원본 유지 목적)
-        probe_cmd = [
-            'ffprobe', '-v', 'error',
-            '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height',
-            '-of', 'json',
-            video_path
-        ]
-        probe = subprocess.run(probe_cmd, capture_output=True, text=True)
-        width = height = None
-        try:
-            info = json.loads(probe.stdout or '{}')
-            stream = (info.get('streams') or [{}])[0]
-            width = stream.get('width')
-            height = stream.get('height')
-        except Exception:
-            width = height = None
-
-        codec_args, fallback_codec_args = get_edit_codec_args(width, height)
+        # 해상도/회전 조회 (원본 유지 목적)
+        geometry = probe_video_geometry(video_path)
+        codec_args, fallback_codec_args = get_edit_codec_args()
+        filter_args = build_filter_args(geometry)
 
         for i, segment in enumerate(keep_segments):
             # 각 구간 추출
@@ -1340,7 +1379,7 @@ def process_video_edit(task_id, video_path, segments, output_path):
                 '-t', str(segment_duration)
             ]
 
-            cmd = base_cmd + codec_args + [
+            cmd = base_cmd + codec_args + filter_args + [
                 '-c:a', 'copy',
                 '-movflags', '+faststart',
                 temp_file
@@ -1350,7 +1389,7 @@ def process_video_edit(task_id, video_path, segments, output_path):
                 subprocess.run(cmd, capture_output=True, check=True)
             except subprocess.CalledProcessError:
                 if fallback_codec_args:
-                    fallback_cmd = base_cmd + fallback_codec_args + [
+                    fallback_cmd = base_cmd + fallback_codec_args + filter_args + [
                         '-c:a', 'copy',
                         '-movflags', '+faststart',
                         temp_file
@@ -1405,24 +1444,9 @@ def process_video_extract(task_id, video_path, segments, output_dir):
         edit_tasks[task_id]['progress'] = 0
         edit_tasks[task_id]['outputs'] = []
 
-        probe_cmd = [
-            'ffprobe', '-v', 'error',
-            '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height',
-            '-of', 'json',
-            video_path
-        ]
-        probe = subprocess.run(probe_cmd, capture_output=True, text=True)
-        width = height = None
-        try:
-            info = json.loads(probe.stdout or '{}')
-            stream = (info.get('streams') or [{}])[0]
-            width = stream.get('width')
-            height = stream.get('height')
-        except Exception:
-            width = height = None
-
-        codec_args, fallback_codec_args = get_edit_codec_args(width, height)
+        geometry = probe_video_geometry(video_path)
+        codec_args, fallback_codec_args = get_edit_codec_args()
+        filter_args = build_filter_args(geometry)
         base_name, _ = os.path.splitext(os.path.basename(video_path))
         valid_segments = [s for s in segments if s.get('end', 0) > s.get('start', 0)]
         total = len(valid_segments)
@@ -1445,7 +1469,7 @@ def process_video_extract(task_id, video_path, segments, output_dir):
                 '-t', str(duration)
             ]
 
-            cmd = base_cmd + codec_args + [
+            cmd = base_cmd + codec_args + filter_args + [
                 '-c:a', 'copy',
                 '-movflags', '+faststart',
                 output_path
@@ -1455,7 +1479,7 @@ def process_video_extract(task_id, video_path, segments, output_dir):
                 subprocess.run(cmd, capture_output=True, check=True)
             except subprocess.CalledProcessError:
                 if fallback_codec_args:
-                    fallback_cmd = base_cmd + fallback_codec_args + [
+                    fallback_cmd = base_cmd + fallback_codec_args + filter_args + [
                         '-c:a', 'copy',
                         '-movflags', '+faststart',
                         output_path
