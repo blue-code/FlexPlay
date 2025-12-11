@@ -1242,13 +1242,15 @@ def get_edit_codec_args():
             '-b:v', '5M',
             '-maxrate', '6M',
             '-bufsize', '12M',
-            '-pix_fmt', 'yuv420p'
+            '-pix_fmt', 'yuv420p',
+            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
         ]
         fallback = [
             '-c:v', 'libx265',
             '-preset', 'medium',
             '-crf', '22',
-            '-pix_fmt', 'yuv420p'
+            '-pix_fmt', 'yuv420p',
+            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
         ]
         return primary, fallback
 
@@ -1256,7 +1258,8 @@ def get_edit_codec_args():
         '-c:v', 'libx265',
         '-preset', 'medium',
         '-crf', '22',
-        '-pix_fmt', 'yuv420p'
+        '-pix_fmt', 'yuv420p',
+        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
     ]
     return primary, None
 
