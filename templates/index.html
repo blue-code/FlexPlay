@@ -893,7 +893,7 @@
                 </div>
 
                 <!-- 구간 편집/추출 섹션 -->
-                <div class="edit-section" id="editSection" style="display: none;">
+                <div class="edit-section" id="editSection">
                     <h3>✂️ 구간 편집 & 추출</h3>
                     <div class="edit-controls">
                         <button class="edit-btn" id="markStartBtn" onclick="markSegmentStart()">📍 시작점 마크</button>
@@ -1005,6 +1005,7 @@
             setupSilentPlaylistSupport();
             setupPlaybackStateHandlers();
             updateSpeedButtonState();
+            resetEditState();
         });
 
         // 비디오 오류 핸들러 설정
