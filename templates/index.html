@@ -892,6 +892,21 @@
                     <button class="speed-btn" data-speed="4" onclick="setPlaybackSpeed(4)">4x</button>
                 </div>
 
+                <!-- 구간 편집/추출 섹션 -->
+                <div class="edit-section" id="editSection" style="display: none;">
+                    <h3>✂️ 구간 편집 & 추출</h3>
+                    <div class="edit-controls">
+                        <button class="edit-btn" id="markStartBtn" onclick="markSegmentStart()">📍 시작점 마크</button>
+                        <button class="edit-btn" id="markEndBtn" onclick="markSegmentEnd()" disabled>📍 끝점 마크</button>
+                        <button class="edit-btn" id="executeEditBtn" onclick="executeEdit('delete')" disabled>🧹 구간 삭제</button>
+                        <button class="edit-btn" id="executeExtractBtn" onclick="executeEdit('extract')" disabled>🎯 구간 추출</button>
+                    </div>
+                    <div id="segmentList" class="segment-list"></div>
+                    <p style="font-size: 0.85em; color: #666; margin-top: 10px;">
+                        💡 시작/끝점을 순서대로 추가하세요. 삭제는 선택 구간을 제거해 하나의 영상으로 합칩니다. 추출은 각 구간을 별도 파일로 뽑아냅니다.
+                    </p>
+                </div>
+
                 <div class="controls">
                     <button class="control-btn" onclick="skipBackward()">⏪ 10초 뒤로</button>
                     <button class="control-btn" onclick="skipForward()">⏩ 10초 앞으로</button>
@@ -928,19 +943,6 @@
                     </ul>
                 </div>
 
-                <!-- 구간 편집 섹션 -->
-                <div class="edit-section" id="editSection" style="display: none;">
-                    <h3>✂️ 구간 삭제 편집</h3>
-                    <div class="edit-controls">
-                        <button class="edit-btn" id="markStartBtn" onclick="markSegmentStart()">📍 시작점 마크</button>
-                        <button class="edit-btn" id="markEndBtn" onclick="markSegmentEnd()" disabled>📍 끝점 마크</button>
-                        <button class="edit-btn" id="executeEditBtn" onclick="executeEdit()" disabled>🎬 편집 실행</button>
-                    </div>
-                    <div id="segmentList" class="segment-list"></div>
-                    <p style="font-size: 0.85em; color: #666; margin-top: 10px;">
-                        💡 삭제할 구간의 시작점과 끝점을 순서대로 마크하세요. 여러 구간을 추가할 수 있습니다.
-                    </p>
-                </div>
             </div>
         </div>
     </div>
@@ -2189,6 +2191,7 @@
             document.getElementById('markStartBtn').disabled = false;
             document.getElementById('markEndBtn').disabled = true;
             document.getElementById('executeEditBtn').disabled = true;
+            document.getElementById('executeExtractBtn').disabled = true;
         }
 
         // 시간을 포맷팅 (초 -> MM:SS)
@@ -2239,7 +2242,7 @@
             currentSegmentStart = null;
             document.getElementById('markStartBtn').disabled = false;
             document.getElementById('markEndBtn').disabled = true;
-            document.getElementById('executeEditBtn').disabled = false;
+            enableEditActions();
 
             alert(`구간 ${formatTime(editSegments[editSegments.length - 1].start)} - ${formatTime(end)}이 추가되었습니다.`);
         }
@@ -2249,7 +2252,9 @@
             const listElement = document.getElementById('segmentList');
 
             if (editSegments.length === 0) {
-                listElement.innerHTML = '<p style="color: #999; font-size: 0.9em;">삭제할 구간이 없습니다.</p>';
+                listElement.innerHTML = '<p style="color: #999; font-size: 0.9em;">등록된 구간이 없습니다.</p>';
+                document.getElementById('executeEditBtn').disabled = true;
+                document.getElementById('executeExtractBtn').disabled = true;
                 return;
             }
 
@@ -2265,20 +2270,24 @@
         function removeSegment(index) {
             editSegments.splice(index, 1);
             updateSegmentList();
-
-            if (editSegments.length === 0) {
-                document.getElementById('executeEditBtn').disabled = true;
-            }
         }
 
-        // 편집 실행
-        async function executeEdit() {
+        function enableEditActions() {
+            const hasSegments = editSegments.length > 0;
+            document.getElementById('executeEditBtn').disabled = !hasSegments;
+            document.getElementById('executeExtractBtn').disabled = !hasSegments;
+        }
+
+        // 편집/추출 실행
+        async function executeEdit(mode = 'delete') {
             if (!currentVideo || editSegments.length === 0) {
-                alert('영상과 삭제할 구간을 확인해주세요.');
+                alert('영상과 구간을 확인해주세요.');
                 return;
             }
 
-            if (!confirm(`${editSegments.length}개 구간을 삭제하여 새로운 영상을 생성하시겠습니까?\n\n원본 파일은 유지됩니다.`)) {
+            const isDelete = mode === 'delete';
+            const actionLabel = isDelete ? '삭제' : '추출';
+            if (!confirm(`${editSegments.length}개 구간을 ${actionLabel}합니다. 원본 파일은 유지됩니다.`)) {
                 return;
             }
 
@@ -2288,10 +2297,11 @@
             const progressText = document.getElementById('progressText');
             overlay.style.display = 'flex';
             progressFill.style.width = '0%';
-            progressText.textContent = '편집 작업을 시작합니다...';
+            progressText.textContent = `${actionLabel} 작업을 시작합니다...`;
 
             try {
-                const response = await fetch('/api/edit', {
+                const endpoint = isDelete ? '/api/edit' : '/api/extract';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -2317,7 +2327,7 @@
 
             } catch (error) {
                 overlay.style.display = 'none';
-                alert('편집 중 오류가 발생했습니다: ' + error.message);
+                alert(`${actionLabel} 중 오류가 발생했습니다: ` + error.message);
                 console.error('Edit error:', error);
             }
         }
@@ -2336,15 +2346,21 @@
                     if (data.status === 'processing') {
                         const progress = data.progress || 0;
                         progressFill.style.width = `${progress}%`;
-                        progressText.textContent = `편집 중... ${Math.round(progress)}%`;
+                        progressText.textContent = `작업 중... ${Math.round(progress)}%`;
                     } else if (data.status === 'completed') {
                         clearInterval(pollInterval);
                         progressFill.style.width = '100%';
-                        progressText.textContent = '편집 완료!';
+                        progressText.textContent = '작업 완료!';
 
                         setTimeout(() => {
                             overlay.style.display = 'none';
-                            alert(`편집이 완료되었습니다!\n\n새 파일: ${data.output_file}`);
+                            if (data.outputs && Array.isArray(data.outputs) && data.outputs.length > 0) {
+                                alert(`추출 완료!\n\n생성된 파일:\n${data.outputs.join('\n')}`);
+                            } else if (data.output_file) {
+                                alert(`편집이 완료되었습니다!\n\n새 파일: ${data.output_file}`);
+                            } else {
+                                alert('작업이 완료되었습니다.');
+                            }
                             resetEditState();
                             loadVideos();  // 영상 목록 새로고침
                         }, 1000);

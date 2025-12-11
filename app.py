@@ -1373,6 +1373,69 @@ def process_video_edit(task_id, video_path, segments, output_path):
                 os.remove(temp_file)
 
 
+def process_video_extract(task_id, video_path, segments, output_dir):
+    """선택한 구간을 각각 별도 파일로 추출"""
+    try:
+        edit_tasks[task_id]['status'] = 'processing'
+        edit_tasks[task_id]['progress'] = 0
+        edit_tasks[task_id]['outputs'] = []
+
+        codec_args, fallback_codec_args = get_edit_codec_args()
+        base_name, _ = os.path.splitext(os.path.basename(video_path))
+        valid_segments = [s for s in segments if s.get('end', 0) > s.get('start', 0)]
+        total = len(valid_segments)
+
+        for idx, segment in enumerate(valid_segments):
+            start = float(segment['start'])
+            end = float(segment['end'])
+            duration = end - start
+            if duration <= 0 or duration < MIN_SEGMENT_DURATION:
+                continue
+
+            timestamp = int(time.time())
+            output_name = f"{base_name}_clip_{idx+1}_{timestamp}.mp4"
+            output_path = os.path.join(output_dir, output_name)
+
+            base_cmd = [
+                'ffmpeg', '-y',
+                '-ss', str(start),
+                '-i', video_path,
+                '-t', str(duration)
+            ]
+
+            cmd = base_cmd + codec_args + [
+                '-c:a', 'copy',
+                '-movflags', '+faststart',
+                output_path
+            ]
+
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+            except subprocess.CalledProcessError:
+                if fallback_codec_args:
+                    fallback_cmd = base_cmd + fallback_codec_args + [
+                        '-c:a', 'copy',
+                        '-movflags', '+faststart',
+                        output_path
+                    ]
+                    subprocess.run(fallback_cmd, capture_output=True, check=True)
+                else:
+                    raise
+
+            edit_tasks[task_id]['outputs'].append(output_name)
+            if total > 0:
+                edit_tasks[task_id]['progress'] = int(((idx + 1) / total) * 95)
+
+        if not edit_tasks[task_id]['outputs']:
+            raise ValueError("유효한 구간이 없습니다.")
+
+        edit_tasks[task_id]['status'] = 'completed'
+        edit_tasks[task_id]['progress'] = 100
+    except Exception as e:
+        edit_tasks[task_id]['status'] = 'error'
+        edit_tasks[task_id]['error'] = str(e)
+
+
 @app.route('/api/edit', methods=['POST'])
 def start_edit():
     """영상 편집 시작"""
@@ -1403,7 +1466,8 @@ def start_edit():
             'status': 'pending',
             'progress': 0,
             'output_file': None,
-            'error': None
+            'error': None,
+            'mode': 'delete'
         }
 
         # 백그라운드 스레드에서 편집 처리
@@ -1417,6 +1481,51 @@ def start_edit():
         return jsonify({
             'task_id': task_id,
             'message': 'Edit task started'
+        })
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/extract', methods=['POST'])
+def start_extract():
+    """선택 구간 추출 시작"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        segments = data.get('segments', [])
+
+        if not filename or not segments:
+            return jsonify({'error': 'Invalid parameters'}), 400
+
+        video_path = find_video_path(filename)
+
+        if not video_path:
+            return jsonify({'error': 'Video not found'}), 404
+
+        video_dir = os.path.dirname(video_path)
+
+        task_id = str(uuid.uuid4())
+        edit_tasks[task_id] = {
+            'status': 'pending',
+            'progress': 0,
+            'outputs': [],
+            'error': None,
+            'mode': 'extract'
+        }
+
+        thread = threading.Thread(
+            target=process_video_extract,
+            args=(task_id, video_path, segments, video_dir)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'task_id': task_id,
+            'message': 'Extract task started'
         })
 
     except ValueError as e:
