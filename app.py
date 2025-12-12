@@ -449,7 +449,7 @@ def get_media_info(file_path):
     cmd = [
         'ffprobe', '-v', 'error',
         '-show_entries',
-        'format=bit_rate:stream=index,codec_type,codec_name,codec_long_name,width,height,bit_rate,channels,channel_layout',
+        'format=bit_rate:stream=index,codec_type,codec_name,codec_long_name,width,height,coded_width,coded_height,bit_rate,channels,channel_layout,side_data_list,tags',
         '-of', 'json',
         file_path
     ]
@@ -480,12 +480,31 @@ def get_media_info(file_path):
         video_stream = next((s for s in streams if s.get('codec_type') == 'video'), None)
         if video_stream:
             codec = video_stream.get('codec_name') or video_stream.get('codec_long_name')
-            width = video_stream.get('width')
-            height = video_stream.get('height')
-            resolution = f"{width}x{height}" if width and height else None
+            width = video_stream.get('width') or video_stream.get('coded_width')
+            height = video_stream.get('height') or video_stream.get('coded_height')
+            rotation = 0
+            try:
+                rotation = int(video_stream.get('tags', {}).get('rotate', 0) or 0)
+            except Exception:
+                rotation = 0
+            for side in video_stream.get('side_data_list') or []:
+                if 'rotation' in side:
+                    try:
+                        rotation = int(side.get('rotation') or rotation)
+                    except Exception:
+                        pass
+
+            display_width = width
+            display_height = height
+            if rotation % 180 != 0 and width and height:
+                display_width, display_height = height, width
+
+            resolution = f"{display_width}x{display_height}" if display_width and display_height else None
             if codec:
                 codec_label = codec.upper() if len(codec) <= 6 else codec
                 metadata['video_codec_info'] = f"{codec_label} ({resolution})" if resolution else codec_label
+            if resolution:
+                metadata['resolution'] = resolution
 
         audio_stream = next((s for s in streams if s.get('codec_type') == 'audio'), None)
         if audio_stream:
