@@ -1900,69 +1900,70 @@
 
         // 키보드 단축키 설정
         function setupKeyboardShortcuts() {
-            const handler = (e) => {
-                // 입력 필드에서는 단축키 무시
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-                    return;
-                }
+            const isTypingTarget = (el) => {
+                const tag = (el && el.tagName) || '';
+                return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+            };
 
-                switch(e.key) {
-                    case ' ':
+            const handler = (e) => {
+                if (isTypingTarget(e.target)) return;
+
+                const key = (e.key || '').toLowerCase();
+                const code = (e.code || '').toLowerCase();
+                const matchKey = (k) => key === k || code === `key${k}`;
+
+                switch(true) {
+                    case matchKey(' '):
                         e.preventDefault();
                         togglePlayPause();
                         break;
-                    case 'ArrowLeft':
+                    case key === 'arrowleft':
                         e.preventDefault();
                         skipBackward();
                         break;
-                    case 'ArrowRight':
+                    case key === 'arrowright':
                         e.preventDefault();
                         skipForward();
                         break;
-                    case 'f':
-                    case 'F':
+                    case matchKey('f'):
                         e.preventDefault();
                         toggleFullscreen();
                         break;
-                    case 'm':
-                    case 'M':
+                    case matchKey('m'):
                         e.preventDefault();
                         videoPlayer.muted = !videoPlayer.muted;
                         break;
-                    case 'ArrowUp':
+                    case key === 'arrowup':
                         e.preventDefault();
                         videoPlayer.volume = Math.min(1, videoPlayer.volume + 0.1);
                         break;
-                    case 'ArrowDown':
+                    case key === 'arrowdown':
                         e.preventDefault();
                         videoPlayer.volume = Math.max(0, videoPlayer.volume - 0.1);
                         break;
-                    case 's':
-                    case 'S':
+                    case matchKey('s'):
                         e.preventDefault();
                         markSegmentStart();
                         break;
-                    case 'e':
-                    case 'E':
+                    case matchKey('e'):
                         e.preventDefault();
                         markSegmentEnd();
                         break;
-                    case 'd':
-                    case 'D':
+                    case matchKey('d'):
                         e.preventDefault();
                         executeEdit('delete');
                         break;
-                    case 'x':
-                    case 'X':
+                    case matchKey('x'):
                         e.preventDefault();
                         executeEdit('extract');
                         break;
                 }
             };
 
-            // Safari에서 비디오 컨트롤이 포커스된 경우에도 동작하도록 capture 리스너 추가
             document.addEventListener('keydown', handler);
             window.addEventListener('keydown', handler, { capture: true });
+            // 비디오 요소에 포커스된 경우를 위해 별도 등록
+            videoPlayer.addEventListener('keydown', handler, { capture: true });
         }
 
         function setupSilentPlaylistSupport() {
