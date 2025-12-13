@@ -1451,15 +1451,11 @@
                     ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="${escapeHtml(video.name)} 썸네일" loading="lazy">`
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                 const durationSec = Number(video.duration || 0);
-                const watchedPos = playbackHistory instanceof Map ? playbackHistory.get(video.name) : undefined;
+                const watchedPos = video.resume_position != null
+                    ? Number(video.resume_position)
+                    : (playbackHistory instanceof Map ? playbackHistory.get(video.name) : undefined);
                 let statusBadge = '';
-                const completeThreshold = durationSec
-                    ? Math.max(durationSec * 0.9, durationSec - 30)
-                    : null;
-
                 if (video.watched) {
-                    statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
-                } else if (durationSec && watchedPos && watchedPos >= completeThreshold) {
                     statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
                 } else if (watchedPos && watchedPos >= HISTORY_MIN_POSITION) {
                     statusBadge = '<span class="watching-badge">▶️ 시청 중</span>';
