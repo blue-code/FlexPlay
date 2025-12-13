@@ -1453,12 +1453,16 @@
                 const durationSec = Number(video.duration || 0);
                 const watchedPos = playbackHistory instanceof Map ? playbackHistory.get(video.name) : undefined;
                 let statusBadge = '';
-                if (durationSec && watchedPos && watchedPos >= durationSec * 0.9) {
+                const completeThreshold = durationSec
+                    ? Math.max(durationSec * 0.9, durationSec - 30)
+                    : null;
+
+                if (video.watched) {
+                    statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
+                } else if (durationSec && watchedPos && watchedPos >= completeThreshold) {
                     statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
                 } else if (watchedPos && watchedPos >= HISTORY_MIN_POSITION) {
                     statusBadge = '<span class="watching-badge">▶️ 시청 중</span>';
-                } else if (video.watched) {
-                    statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
                 }
                 const isActive = currentVideo === video.name;
                 const isSelected = selectedVideoNames.has(video.name);
