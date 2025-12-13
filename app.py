@@ -735,7 +735,7 @@ def get_videos():
         duration = video.get('duration') or 0
         watched = False
         if duration and pos:
-            threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
+            threshold = max(duration * 0.8, duration - 60)  # 여유를 넉넉히 줌
             watched = pos >= threshold
         video['watched'] = watched
         video['resume_position'] = pos
