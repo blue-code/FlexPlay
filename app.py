@@ -318,16 +318,17 @@ def ensure_thumbnail_ready(video_path, folder_path, filename, source_mtime, dura
 
     if os.path.exists(thumbnail_path):
         thumb_mtime = os.path.getmtime(thumbnail_path)
+        # 최신이면 바로 사용, pending 아님
         if not source_mtime or thumb_mtime >= source_mtime:
             return thumbnail_url, False
 
+        # 오래된 경우 백그라운드 갱신을 예약하지만 UI에는 pending 표시 안 함
+        schedule_thumbnail_generation(video_path, folder_path, filename, thumbnail_path, duration)
+        return thumbnail_url, False
+
     scheduled = schedule_thumbnail_generation(video_path, folder_path, filename, thumbnail_path, duration)
-
-    if os.path.exists(thumbnail_path):
-        # 기존 썸네일이 있으면 우선 제공하고, 백그라운드에서 최신화
-        return thumbnail_url, scheduled
-
-    return None, scheduled
+    # 썸네일이 없는 경우에만 pending true 반환
+    return (thumbnail_url if os.path.exists(thumbnail_path) else None), bool(scheduled)
 
 
 def delete_thumbnail_for_video(video_path):
