@@ -1906,6 +1906,7 @@
             };
 
             const handler = (e) => {
+                if (e._flexHandled) return;
                 if (isTypingTarget(e.target)) return;
 
                 const key = (e.key || '').toLowerCase();
@@ -1957,13 +1958,15 @@
                         e.preventDefault();
                         executeEdit('extract');
                         break;
+                    default:
+                        return;
                 }
+
+                e._flexHandled = true;
             };
 
-            document.addEventListener('keydown', handler);
-            window.addEventListener('keydown', handler, { capture: true });
-            // 비디오 요소에 포커스된 경우를 위해 별도 등록
-            videoPlayer.addEventListener('keydown', handler, { capture: true });
+            // capture=true 로 한 번만 등록해 Safari 포커스 이슈 회피, 중복 실행 방지
+            document.addEventListener('keydown', handler, { capture: true });
         }
 
         function setupSilentPlaylistSupport() {
