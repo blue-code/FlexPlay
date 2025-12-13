@@ -1900,7 +1900,7 @@
 
         // 키보드 단축키 설정
         function setupKeyboardShortcuts() {
-            document.addEventListener('keydown', (e) => {
+            const handler = (e) => {
                 // 입력 필드에서는 단축키 무시
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
                     return;
@@ -1958,7 +1958,11 @@
                         executeEdit('extract');
                         break;
                 }
-            });
+            };
+
+            // Safari에서 비디오 컨트롤이 포커스된 경우에도 동작하도록 capture 리스너 추가
+            document.addEventListener('keydown', handler);
+            window.addEventListener('keydown', handler, { capture: true });
         }
 
         function setupSilentPlaylistSupport() {
