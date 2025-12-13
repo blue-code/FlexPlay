@@ -2089,11 +2089,14 @@
         }
 
         // 재생 기록 저장
-        async function saveToHistory(filename, position) {
+        async function saveToHistory(filename, position, durationOverride) {
             try {
                 const payload = {
                     filename: filename,
-                    position: typeof position === 'number' ? position : videoPlayer.currentTime
+                    position: typeof position === 'number' ? position : videoPlayer.currentTime,
+                    duration: typeof durationOverride === 'number'
+                        ? durationOverride
+                        : (isFinite(videoPlayer.duration) ? videoPlayer.duration : null)
                 };
                 playbackHistory.set(filename, payload.position);
                 const response = await fetch('/api/history', {
@@ -2218,7 +2221,7 @@
             if (!force && position < HISTORY_MIN_POSITION) {
                 return;
             }
-            saveToHistory(currentVideo, position);
+            saveToHistory(currentVideo, position, duration);
         }
 
         function escapeHtml(value) {
