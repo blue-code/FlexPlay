@@ -2267,7 +2267,8 @@
             currentSegmentStart = videoPlayer.currentTime;
             document.getElementById('markStartBtn').disabled = true;
             document.getElementById('markEndBtn').disabled = false;
-            alert(`시작점이 ${formatTime(currentSegmentStart)}에 마크되었습니다.`);
+            // Safari 중복 팝업 방지를 위해 console 로그로 대체
+            console.log(`Segment start marked at ${formatTime(currentSegmentStart)}`);
         }
 
         // 구간 끝점 마크
@@ -2300,7 +2301,7 @@
             document.getElementById('markEndBtn').disabled = true;
             enableEditActions();
 
-            alert(`구간 ${formatTime(editSegments[editSegments.length - 1].start)} - ${formatTime(end)}이 추가되었습니다.`);
+            console.log(`Segment added ${formatTime(editSegments[editSegments.length - 1].start)} - ${formatTime(end)}`);
         }
 
         // 구간 리스트 UI 업데이트
