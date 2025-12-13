@@ -1289,6 +1289,12 @@ def handle_history():
 
         max_pos = max(existing_pos, position)
         watched_flag = existing_watched
+        if duration <= 0 and existing_entry:
+            try:
+                duration = float(existing_entry.get('duration') or 0)
+            except Exception:
+                duration = 0
+
         if duration > 0:
             threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
             if max_pos >= threshold:
