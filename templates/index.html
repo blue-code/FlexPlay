@@ -1937,6 +1937,26 @@
                         e.preventDefault();
                         videoPlayer.volume = Math.max(0, videoPlayer.volume - 0.1);
                         break;
+                    case 's':
+                    case 'S':
+                        e.preventDefault();
+                        markSegmentStart();
+                        break;
+                    case 'e':
+                    case 'E':
+                        e.preventDefault();
+                        markSegmentEnd();
+                        break;
+                    case 'd':
+                    case 'D':
+                        e.preventDefault();
+                        executeEdit('delete');
+                        break;
+                    case 'x':
+                    case 'X':
+                        e.preventDefault();
+                        executeEdit('extract');
+                        break;
                 }
             });
         }
