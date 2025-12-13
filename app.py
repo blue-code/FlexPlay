@@ -31,6 +31,8 @@ app.secret_key = os.environ.get('FLEXPLAY_SECRET_KEY', 'change-me-for-production
 app.permanent_session_lifetime = timedelta(days=30)
 
 MIN_SEGMENT_DURATION = 0.05  # seconds; ignore shorter leftovers to avoid zero-length cuts
+WATCH_COMPLETE_RATIO = 0.9
+WATCH_COMPLETE_OFFSET = 30  # seconds
 
 # 설정
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -718,9 +720,25 @@ def get_videos():
 
     videos = get_video_files(folder_filter)
     history_entries = load_history()
-    watched_files = {entry.get('filename') for entry in history_entries if entry.get('filename')}
+    history_positions = {}
+    for entry in history_entries:
+        fname = entry.get('filename')
+        if not fname:
+            continue
+        try:
+            history_positions[fname] = float(entry.get('position') or 0)
+        except Exception:
+            history_positions[fname] = 0
+
     for video in videos:
-        video['watched'] = video['name'] in watched_files
+        pos = history_positions.get(video['name'], 0)
+        duration = video.get('duration') or 0
+        watched = False
+        if duration and pos:
+            threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
+            watched = pos >= threshold
+        video['watched'] = watched
+        video['resume_position'] = pos
     available_extensions = []
 
     if include_meta:
