@@ -382,6 +382,16 @@
             white-space: nowrap;
         }
 
+        .watching-badge {
+            background: #fff3cd;
+            color: #8a6d3b;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.75em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
         .thumb-stack {
             display: flex;
             flex-direction: column;
@@ -1440,7 +1450,16 @@
                 const thumbContent = hasThumbnail
                     ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="${escapeHtml(video.name)} 썸네일" loading="lazy">`
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
-                const watchedBadge = video.watched ? '<span class="watched-badge">👁️ 시청함</span>' : '';
+                const durationSec = Number(video.duration || 0);
+                const watchedPos = playbackHistory instanceof Map ? playbackHistory.get(video.name) : undefined;
+                let statusBadge = '';
+                if (durationSec && watchedPos && watchedPos >= durationSec * 0.9) {
+                    statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
+                } else if (watchedPos && watchedPos >= HISTORY_MIN_POSITION) {
+                    statusBadge = '<span class="watching-badge">▶️ 시청 중</span>';
+                } else if (video.watched) {
+                    statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
+                }
                 const isActive = currentVideo === video.name;
                 const isSelected = selectedVideoNames.has(video.name);
                 const extensionLabel = video.extension ? video.extension.replace('.', '').toUpperCase() : '';
@@ -1472,7 +1491,7 @@
                                         ${bitrateText ? `<span class="info-chip"><span class="label">비트</span>${bitrateText}</span>` : ''}
                                     </div>
                                 </div>
-                                ${watchedBadge}
+                                ${statusBadge}
                             </div>
                             <div class="meta-subline">
                                 <span class="info-chip"><span class="label">폴더</span>${escapeHtml(video.folder || 'Unknown')}</span>
