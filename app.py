@@ -726,16 +726,21 @@ def get_videos():
         if not fname:
             continue
         try:
-            history_positions[fname] = float(entry.get('position') or 0)
+            pos = float(entry.get('position') or 0)
         except Exception:
-            history_positions[fname] = 0
+            pos = 0
+        history_positions[fname] = {
+            'pos': pos,
+            'watched': bool(entry.get('watched'))
+        }
 
     for video in videos:
-        pos = history_positions.get(video['name'], 0)
+        hist_entry = history_positions.get(video['name']) or {}
+        pos = hist_entry.get('pos', 0)
         duration = video.get('duration') or 0
-        watched = False
-        if duration and pos:
-            threshold = max(duration * 0.8, duration - 60)  # 여유를 넉넉히 줌
+        watched = bool(hist_entry.get('watched'))
+        if not watched and duration and pos:
+            threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
             watched = pos >= threshold
         video['watched'] = watched
         video['resume_position'] = pos
@@ -1252,14 +1257,50 @@ def handle_history():
         data = request.get_json()
         history = load_history()
 
+        filename = data.get('filename')
+        if not filename:
+            return jsonify({'error': 'Filename required'}), 400
+
+        # 기존 기록 보존
+        existing_entry = next((h for h in history if h.get('filename') == filename), None)
+
         # 중복 제거 (같은 영상이면 최신 기록만 유지)
-        history = [h for h in history if h.get('filename') != data.get('filename')]
+        history = [h for h in history if h.get('filename') != filename]
+
+        # 값 정규화
+        try:
+            position = float(data.get('position') or 0)
+        except Exception:
+            position = 0
+
+        try:
+            duration = float(data.get('duration') or 0)
+        except Exception:
+            duration = 0
+
+        existing_pos = 0
+        existing_watched = False
+        if existing_entry:
+            try:
+                existing_pos = float(existing_entry.get('position') or 0)
+            except Exception:
+                existing_pos = 0
+            existing_watched = bool(existing_entry.get('watched'))
+
+        max_pos = max(existing_pos, position)
+        watched_flag = existing_watched
+        if duration > 0:
+            threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
+            if max_pos >= threshold:
+                watched_flag = True
 
         # 새 기록 추가
         history.insert(0, {
-            'filename': data.get('filename'),
+            'filename': filename,
             'timestamp': datetime.now().isoformat(),
-            'position': data.get('position', 0)
+            'position': max_pos,
+            'duration': duration,
+            'watched': watched_flag
         })
 
         # 최대 50개까지만 유지
