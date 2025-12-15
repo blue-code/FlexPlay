@@ -487,12 +487,32 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 0.8em;
-            margin-top: 8px;
             transition: background 0.3s;
         }
 
         .delete-btn:hover {
             background: #c82333;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .move-btn-item {
+            background: #20b2aa;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: background 0.3s;
+        }
+
+        .move-btn-item:hover {
+            background: #1a8f88;
         }
 
         .player-container {
@@ -1413,7 +1433,10 @@
                 }
 
                 updateBulkSelectionInfo();
-                await loadVideos();
+                await Promise.all([
+                    loadVideos(),
+                    loadFolders({ preserveSelection: true, skipVideos: true })
+                ]);
             } catch (error) {
                 alert('이동 중 오류가 발생했습니다: ' + error.message);
                 console.error('Bulk move error:', error);
@@ -1426,6 +1449,42 @@
             }
         }
 
+                async function moveVideo(filename, event) {
+                    event.stopPropagation();
+        
+                    const targetSelect = document.getElementById('bulkMoveTarget');
+                    if (!targetSelect || !targetSelect.value) {
+                        alert('이동할 경로를 선택해주세요.');
+                        return;
+                    }
+        
+                    const target = targetSelect.value;
+        
+                    try {
+                        const response = await fetch('/api/move', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                filenames: [filename],
+                                target: target
+                            })
+                        });
+                        const result = await response.json();
+                        if (!response.ok) {
+                            throw new Error(result.error || '이동에 실패했습니다.');
+                        }
+        
+                        // Refresh list
+                        await Promise.all([
+                            loadVideos(),
+                            loadFolders({ preserveSelection: true, skipVideos: true })
+                        ]);
+        
+                    } catch (error) {
+                        alert('이동 중 오류가 발생했습니다: ' + error.message);
+                        console.error('Single move error:', error);
+                    }
+                }
 
         // 영상 목록 표시
         function displayVideos(videoList) {
@@ -1508,8 +1567,10 @@
                                     ${hlsEnabled && isActive ? '<span class="info-chip">📡 HLS</span>' : ''}
                                     ${transcodeEnabled && isActive ? '<span class="info-chip">📱 트랜스코딩</span>' : ''}
                                 </div>
-                                <button class="delete-btn"
-                                        onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
+                                <div class="action-buttons">
+                                    <button class="move-btn-item" onclick="moveVideo(decodeURIComponent('${encodedName}'), event)">이동</button>
+                                    <button class="delete-btn" onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
+                                </div>
                             </div>
                         </div>
                     </div>
