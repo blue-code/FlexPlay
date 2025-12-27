@@ -122,6 +122,19 @@ VIDEO_EXTENSIONS = {
     '.amv',  # AMV
 }
 
+# 지원하는 이미지 파일 확장자
+IMAGE_EXTENSIONS = {
+    '.jpg', '.jpeg',  # JPEG
+    '.png',  # PNG
+    '.gif',  # GIF
+    '.bmp',  # Bitmap
+    '.webp',  # WebP
+    '.svg',  # SVG
+    '.ico',  # Icon
+    '.tiff', '.tif',  # TIFF
+    '.heic', '.heif',  # HEIF (iOS)
+}
+
 # MIME 타입 매핑 (브라우저 호환성 개선)
 MIME_TYPES = {
     '.mp4': 'video/mp4',
@@ -185,13 +198,29 @@ def safe_join(base_path, filename):
 
 
 def find_video_path(filename):
-    """모든 폴더에서 영상 파일 찾기"""
+    """모든 폴더에서 영상 파일 찾기 (하위 경로 포함)"""
     folders = get_video_folders()
     for folder in folders:
         try:
-            video_path = safe_join(folder['path'], filename)
-            if os.path.exists(video_path):
-                return video_path
+            # 파일명에 경로가 포함되어 있을 수 있음 (브라우징 모드)
+            # 경로 구분자를 안전하게 처리
+            if '/' in filename or '\\' in filename:
+                # 하위 경로가 포함된 경우
+                parts = filename.replace('\\', '/').split('/')
+                current_path = folder['path']
+                for part in parts:
+                    current_path = os.path.join(current_path, part)
+
+                # 경로 검증
+                current_path_abs = os.path.abspath(current_path)
+                base_path_abs = os.path.abspath(folder['path'])
+                if current_path_abs.startswith(base_path_abs) and os.path.exists(current_path):
+                    return current_path
+            else:
+                # 단순 파일명인 경우 기존 로직
+                video_path = safe_join(folder['path'], filename)
+                if os.path.exists(video_path):
+                    return video_path
         except:
             continue
     return None
@@ -775,6 +804,174 @@ def get_videos():
     return jsonify(filtered_videos)
 
 
+@app.route('/api/browse')
+def browse_directory():
+    """폴더 탐색 API - 현재 경로의 폴더와 파일(영상, 이미지) 반환"""
+    # 현재 경로 파라미터
+    folder_name = request.args.get('folder', '').strip()
+    subpath = request.args.get('path', '').strip()
+
+    # 폴더 정보 가져오기
+    folders = get_video_folders()
+
+    # 선택된 폴더 찾기
+    selected_folder = None
+    for folder_info in folders:
+        if folder_info['name'] == folder_name:
+            selected_folder = folder_info
+            break
+
+    if not selected_folder:
+        return jsonify({'error': 'Folder not found'}), 404
+
+    base_path = selected_folder['path']
+
+    # 경로 조합 (보안: 상위 디렉토리 탐색 방지)
+    if subpath:
+        # ".." 제거하여 상위 디렉토리 공격 방지
+        subpath_clean = os.path.normpath(subpath).replace('..', '')
+        current_path = os.path.join(base_path, subpath_clean)
+    else:
+        current_path = base_path
+
+    # 경로가 base_path 내부에 있는지 확인
+    current_path_abs = os.path.abspath(current_path)
+    base_path_abs = os.path.abspath(base_path)
+    if not current_path_abs.startswith(base_path_abs):
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not os.path.exists(current_path) or not os.path.isdir(current_path):
+        return jsonify({'error': 'Directory not found'}), 404
+
+    # 현재 경로에서 폴더와 파일 목록 가져오기
+    items = []
+
+    try:
+        for entry in os.listdir(current_path):
+            entry_path = os.path.join(current_path, entry)
+
+            # 숨김 파일 제외
+            if entry.startswith('.'):
+                continue
+
+            if os.path.isdir(entry_path):
+                # 폴더
+                items.append({
+                    'name': entry,
+                    'type': 'folder',
+                    'path': entry
+                })
+            elif os.path.isfile(entry_path):
+                ext = os.path.splitext(entry)[1].lower()
+
+                # 영상 파일
+                if ext in VIDEO_EXTENSIONS:
+                    stat = os.stat(entry_path)
+                    media_info = get_media_info(entry_path)
+                    thumbnail_url, thumbnail_pending = ensure_thumbnail_ready(
+                        entry_path,
+                        current_path,
+                        entry,
+                        stat.st_mtime,
+                        media_info.get('duration') if media_info else None
+                    )
+                    items.append({
+                        'name': entry,
+                        'type': 'video',
+                        'path': entry,
+                        'size': stat.st_size,
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'extension': ext,
+                        'thumbnail_url': thumbnail_url,
+                        'thumbnail_pending': thumbnail_pending,
+                        **media_info
+                    })
+
+                # 이미지 파일
+                elif ext in IMAGE_EXTENSIONS:
+                    stat = os.stat(entry_path)
+                    items.append({
+                        'name': entry,
+                        'type': 'image',
+                        'path': entry,
+                        'size': stat.st_size,
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'extension': ext
+                    })
+
+        # 정렬: 폴더 먼저, 그 다음 파일 (이름순)
+        items.sort(key=lambda x: (x['type'] != 'folder', x['name'].lower()))
+
+        # 상위 경로 정보
+        parent_path = None
+        if subpath:
+            parent_path = os.path.dirname(subpath)
+
+        return jsonify({
+            'folder': folder_name,
+            'current_path': subpath or '',
+            'parent_path': parent_path,
+            'items': items
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image/<path:folder_name>/<path:filepath>')
+def serve_image(folder_name, filepath):
+    """이미지 파일 제공"""
+    folders = get_video_folders()
+
+    selected_folder = None
+    for folder_info in folders:
+        if folder_info['name'] == folder_name:
+            selected_folder = folder_info
+            break
+
+    if not selected_folder:
+        return jsonify({'error': 'Folder not found'}), 404
+
+    base_path = selected_folder['path']
+
+    # 보안: 상위 디렉토리 공격 방지
+    filepath_clean = os.path.normpath(filepath).replace('..', '')
+    image_path = os.path.join(base_path, filepath_clean)
+
+    # 경로 검증
+    image_path_abs = os.path.abspath(image_path)
+    base_path_abs = os.path.abspath(base_path)
+    if not image_path_abs.startswith(base_path_abs):
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not os.path.exists(image_path) or not os.path.isfile(image_path):
+        return jsonify({'error': 'Image not found'}), 404
+
+    # 확장자 확인
+    ext = os.path.splitext(image_path)[1].lower()
+    if ext not in IMAGE_EXTENSIONS:
+        return jsonify({'error': 'Not an image file'}), 400
+
+    # MIME 타입 결정
+    mime_types_map = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.bmp': 'image/bmp',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.tiff': 'image/tiff',
+        '.tif': 'image/tiff',
+        '.heic': 'image/heic',
+        '.heif': 'image/heif',
+    }
+    mime_type = mime_types_map.get(ext, 'application/octet-stream')
+
+    return send_file(image_path, mimetype=mime_type)
+
+
 @app.route('/api/video/<path:filename>')
 def serve_video(filename):
     """영상 스트리밍"""
@@ -801,6 +998,76 @@ def serve_video(filename):
     length = byte_end - byte_start + 1
 
     with open(video_path, 'rb') as f:
+        f.seek(byte_start)
+        data = f.read(length)
+
+    response = Response(
+        data,
+        206,
+        mimetype=get_mime_type(filename),
+        direct_passthrough=True
+    )
+
+    response.headers.add('Content-Range', f'bytes {byte_start}-{byte_end}/{size}')
+    response.headers.add('Accept-Ranges', 'bytes')
+    response.headers.add('Content-Length', str(length))
+
+    return response
+
+
+@app.route('/api/video-silent/<path:filename>')
+def serve_video_silent(filename):
+    """오디오 없는 영상 스트리밍 (백그라운드 음악 보호용 - iOS 최적화)"""
+    video_path = find_video_path(filename)
+
+    if not video_path:
+        return jsonify({'error': 'Video not found'}), 404
+
+    # 캐시 디렉토리
+    cache_dir = os.path.join(os.path.dirname(__file__), 'static', 'silent_videos')
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # 캐시 파일명 생성
+    name, ext = os.path.splitext(os.path.basename(filename))
+    cache_filename = f"{name}_silent{ext}"
+    cache_path = os.path.join(cache_dir, cache_filename)
+
+    # 캐시 파일이 없거나 원본보다 오래된 경우 생성
+    if not os.path.exists(cache_path) or os.path.getmtime(video_path) > os.path.getmtime(cache_path):
+        try:
+            # ffmpeg로 오디오 제거 (비디오 복사로 빠름)
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', video_path,
+                '-an',  # 오디오 트랙 제거
+                '-c:v', 'copy',  # 비디오는 복사 (재인코딩 없음)
+                '-movflags', '+faststart',  # iOS 최적화
+                cache_path
+            ]
+            subprocess.run(cmd, capture_output=True, check=True, timeout=300)
+        except subprocess.CalledProcessError as e:
+            return jsonify({'error': 'Failed to remove audio track'}), 500
+        except subprocess.TimeoutExpired:
+            return jsonify({'error': 'Audio removal timeout'}), 500
+
+    # Range request 지원 (iOS Safari 필수)
+    range_header = request.headers.get('Range', None)
+
+    if not range_header:
+        return send_file(cache_path, mimetype=get_mime_type(filename))
+
+    size = os.path.getsize(cache_path)
+    byte_start, byte_end = 0, size - 1
+
+    if range_header:
+        byte_range = range_header.replace('bytes=', '').split('-')
+        byte_start = int(byte_range[0])
+        if byte_range[1]:
+            byte_end = int(byte_range[1])
+
+    length = byte_end - byte_start + 1
+
+    with open(cache_path, 'rb') as f:
         f.seek(byte_start)
         data = f.read(length)
 
@@ -1032,6 +1299,71 @@ def delete_video(filename):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/delete-folder', methods=['DELETE'])
+def delete_folder():
+    """브라우징 모드에서 탐색된 하위 폴더 삭제"""
+    data = request.get_json() or {}
+    folder_name = data.get('folder_name')  # 루트 폴더명 (config에 설정된)
+    subfolder_path = data.get('subfolder_path', '')  # 삭제할 하위 폴더 경로
+
+    if not folder_name:
+        return jsonify({'error': 'Folder name is required'}), 400
+
+    # 루트 폴더 정보 찾기
+    folders = get_video_folders()
+    selected_folder = None
+    for folder_info in folders:
+        if folder_info['name'] == folder_name:
+            selected_folder = folder_info
+            break
+
+    if not selected_folder:
+        return jsonify({'error': 'Root folder not found'}), 404
+
+    base_path = selected_folder['path']
+
+    # 삭제할 폴더 경로 조합 (보안: 상위 디렉토리 탐색 방지)
+    if subfolder_path:
+        # ".." 제거하여 상위 디렉토리 공격 방지
+        subfolder_clean = os.path.normpath(subfolder_path).replace('..', '')
+        target_path = os.path.join(base_path, subfolder_clean)
+    else:
+        return jsonify({'error': 'Subfolder path is required'}), 400
+
+    # 경로가 base_path 내부에 있는지 확인
+    target_path_abs = os.path.abspath(target_path)
+    base_path_abs = os.path.abspath(base_path)
+    if not target_path_abs.startswith(base_path_abs):
+        return jsonify({'error': 'Invalid path - security violation'}), 403
+
+    # 루트 폴더 자체를 삭제하려는 시도 방지
+    if target_path_abs == base_path_abs:
+        return jsonify({'error': 'Cannot delete root folder'}), 403
+
+    # 폴더가 존재하는지 확인
+    if not os.path.exists(target_path):
+        return jsonify({'error': 'Folder does not exist'}), 404
+
+    if not os.path.isdir(target_path):
+        return jsonify({'error': 'Path is not a directory'}), 400
+
+    try:
+        # 폴더 내 모든 비디오 파일의 썸네일 삭제 (재귀적으로)
+        for root, dirs, files in os.walk(target_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                ext = os.path.splitext(file)[1].lower()
+                if ext in VIDEO_EXTENSIONS:
+                    delete_thumbnail_for_video(file_path)
+
+        # 폴더 삭제
+        shutil.rmtree(target_path)
+
+        return jsonify({'success': True, 'message': 'Folder deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/move', methods=['POST'])
 def move_video_to_target():
     """영상 파일을 지정된 이동 대상 폴더로 이동 (단일 또는 다중)"""
@@ -1153,7 +1485,8 @@ def cleanup_old_cache():
 
         cache_dirs = [
             os.path.join(os.path.dirname(__file__), 'static', 'transcoded'),
-            os.path.join(os.path.dirname(__file__), 'static', 'hls')
+            os.path.join(os.path.dirname(__file__), 'static', 'hls'),
+            os.path.join(os.path.dirname(__file__), 'static', 'silent_videos')
         ]
 
         now = time.time()

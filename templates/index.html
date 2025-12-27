@@ -78,6 +78,26 @@
             background: #5568d3;
         }
 
+        .browse-mode-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+            margin-left: 10px;
+        }
+
+        .browse-mode-btn:hover {
+            background: #218838;
+        }
+
+        .browse-mode-btn.active {
+            background: #007bff;
+        }
+
         .folder-filter {
             background: #f0f4ff;
             padding: 12px;
@@ -403,7 +423,6 @@
 
         .video-thumb {
             width: 100%;
-            aspect-ratio: 16 / 9;
             border-radius: 10px;
             overflow: hidden;
             background: #0f1115;
@@ -412,6 +431,19 @@
             align-items: center;
             justify-content: center;
             box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+            min-height: 120px;
+            max-height: 400px;
+        }
+
+        /* 가로 이미지 (기본값) */
+        .video-thumb.landscape {
+            aspect-ratio: 16 / 9;
+        }
+
+        /* 세로 이미지 */
+        .video-thumb.portrait {
+            aspect-ratio: 9 / 16;
+            max-height: 300px;
         }
 
         .thumb-caption {
@@ -433,7 +465,7 @@
         .video-thumb img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             display: block;
         }
 
@@ -855,6 +887,570 @@
             display: block;
             margin-bottom: 5px;
         }
+
+        .browse-controls {
+            background: #e8f5e9;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #28a745;
+        }
+
+        .browse-controls select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .breadcrumb {
+            font-size: 0.85em;
+            color: #555;
+            margin-bottom: 8px;
+            padding: 6px;
+            background: white;
+            border-radius: 5px;
+        }
+
+        .breadcrumb-item {
+            display: inline-block;
+            cursor: pointer;
+            color: #667eea;
+            transition: color 0.2s;
+        }
+
+        .breadcrumb-item:hover {
+            color: #5568d3;
+            text-decoration: underline;
+        }
+
+        .breadcrumb-separator {
+            margin: 0 5px;
+            color: #999;
+        }
+
+        .folder-item {
+            background: #fff9e6;
+            border-left-color: #ffc107 !important;
+            position: relative;
+        }
+
+        .folder-item:hover {
+            background: #fff3cd;
+        }
+
+        .folder-icon {
+            font-size: 1.5em;
+            margin-right: 8px;
+        }
+
+        .browse-folder-delete-btn {
+            position: absolute;
+            top: 50%;
+            right: 15px;
+            transform: translateY(-50%);
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s, background 0.2s;
+            z-index: 10;
+        }
+
+        .folder-item:hover .browse-folder-delete-btn {
+            opacity: 1;
+        }
+
+        .browse-folder-delete-btn:hover {
+            background: #c82333;
+        }
+
+        .image-item {
+            background: #e3f2fd;
+            border-left-color: #2196f3 !important;
+        }
+
+        .image-item:hover {
+            background: #bbdefb;
+        }
+
+        .image-viewer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .image-viewer-content {
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+        }
+
+        .image-viewer-content img {
+            max-width: 100%;
+            max-height: 90vh;
+            display: block;
+            border-radius: 10px;
+        }
+
+        .image-viewer-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2em;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .image-viewer-close:hover {
+            background: white;
+        }
+
+        .image-viewer-name {
+            text-align: center;
+            color: white;
+            margin-top: 15px;
+            font-size: 1.1em;
+        }
+
+        .fullscreen-viewer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            display: none;
+            z-index: 3000;
+            flex-direction: column;
+        }
+
+        .fullscreen-viewer.active {
+            display: flex;
+        }
+
+        .viewer-header {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .viewer-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .viewer-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .viewer-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .viewer-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .viewer-btn.danger {
+            background: rgba(220, 53, 69, 0.2);
+            border-color: rgba(220, 53, 69, 0.5);
+        }
+
+        .viewer-btn.danger:hover {
+            background: rgba(220, 53, 69, 0.4);
+        }
+
+        .viewer-btn.success {
+            background: rgba(40, 167, 69, 0.2);
+            border-color: rgba(40, 167, 69, 0.5);
+        }
+
+        .viewer-btn.success:hover {
+            background: rgba(40, 167, 69, 0.4);
+        }
+
+        .viewer-move-select {
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            min-width: 150px;
+        }
+
+        .viewer-content {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+
+        .viewer-media-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .viewer-media-container img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .viewer-media-container video {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .viewer-nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            padding: 20px 15px;
+            cursor: pointer;
+            font-size: 2em;
+            transition: all 0.3s;
+            z-index: 10;
+        }
+
+        .viewer-nav-btn:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .viewer-nav-btn.prev {
+            left: 20px;
+        }
+
+        .viewer-nav-btn.next {
+            right: 20px;
+        }
+
+        .viewer-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .viewer-info {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            color: white;
+            text-align: center;
+            font-size: 0.9em;
+            backdrop-filter: blur(10px);
+        }
+
+        .viewer-counter {
+            color: #999;
+            margin-left: 15px;
+            font-size: 0.85em;
+        }
+
+        .viewer-action-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
+            padding: 30px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+            z-index: 20;
+        }
+
+        .viewer-action-overlay.hidden {
+            transform: translateY(calc(100% - 50px));
+        }
+
+        .viewer-header.hidden {
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .viewer-nav-btn.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay-handle {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 2px;
+            cursor: pointer;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: stretch;
+        }
+
+        .action-row select {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .action-btn-large {
+            flex: 1;
+            padding: 16px 20px;
+            font-size: 1.1em;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+            min-height: 56px;
+        }
+
+        .action-btn-large.move-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .action-btn-large.move-btn:active {
+            transform: scale(0.95);
+            background: linear-gradient(135deg, #5568d3 0%, #653a8a 100%);
+        }
+
+        .action-btn-large.delete-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .action-btn-large.delete-btn:active {
+            transform: scale(0.95);
+            background: linear-gradient(135deg, #e082ea 0%, #e4465b 100%);
+        }
+
+        .action-btn-large.folder-btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .action-btn-large.folder-btn:active {
+            transform: scale(0.95);
+            background: linear-gradient(135deg, #3e9bed 0%, #00e1ed 100%);
+        }
+
+        .viewer-folder-view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            z-index: 15;
+        }
+
+        .viewer-folder-view.active {
+            display: flex;
+        }
+
+        .folder-icon-large {
+            font-size: 8em;
+            margin-bottom: 20px;
+        }
+
+        .folder-name-large {
+            font-size: 1.5em;
+            color: white;
+            margin-bottom: 30px;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .folder-actions {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .folder-action-btn {
+            padding: 16px 32px;
+            font-size: 1.1em;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            min-width: 140px;
+            transition: all 0.3s;
+        }
+
+        .folder-action-btn.enter {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .folder-action-btn.enter:active {
+            transform: scale(0.95);
+        }
+
+        .folder-action-btn.skip {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .folder-action-btn.skip:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* 모바일 최적화 */
+        @media (max-width: 768px) {
+            .viewer-header {
+                padding: 10px 15px;
+                flex-wrap: wrap;
+            }
+
+            .viewer-title {
+                font-size: 0.95em;
+            }
+
+            .viewer-counter {
+                font-size: 0.8em;
+                margin-left: 10px;
+            }
+
+            .viewer-btn {
+                padding: 10px 12px;
+                font-size: 0.85em;
+            }
+
+            .viewer-actions {
+                gap: 8px;
+            }
+
+            .viewer-move-select {
+                min-width: 120px;
+                font-size: 0.85em;
+            }
+
+            .viewer-nav-btn {
+                padding: 30px 15px;
+                font-size: 2.5em;
+            }
+
+            .viewer-nav-btn.prev {
+                left: 0;
+            }
+
+            .viewer-nav-btn.next {
+                right: 0;
+            }
+
+            .viewer-info {
+                padding: 8px 15px;
+                font-size: 0.8em;
+            }
+
+            .action-btn-large {
+                font-size: 1em;
+                padding: 14px 18px;
+            }
+
+            .folder-icon-large {
+                font-size: 6em;
+            }
+
+            .folder-name-large {
+                font-size: 1.2em;
+            }
+        }
+
+        /* 터치 영역 확대 */
+        @media (hover: none) and (pointer: coarse) {
+            .viewer-nav-btn {
+                width: 80px;
+                opacity: 0.3;
+            }
+
+            .viewer-nav-btn:active {
+                opacity: 0.8;
+            }
+
+            .action-btn-large {
+                min-height: 60px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -866,7 +1462,19 @@
             <div class="video-list-container">
                 <div class="video-list-header">
                     <h2>영상 목록</h2>
-                    <button class="refresh-btn" onclick="refreshVideoList()">새로고침</button>
+                    <div>
+                        <button class="refresh-btn" onclick="refreshVideoList()">새로고침</button>
+                        <button class="browse-mode-btn" id="browseModeBtn" onclick="toggleBrowseMode()">📁 폴더 탐색</button>
+                    </div>
+                </div>
+
+                <!-- 브라우징 모드 컨트롤 -->
+                <div class="browse-controls" id="browseControls" style="display: none;">
+                    <h3 style="font-size: 0.95em; margin-bottom: 8px;">📂 폴더 탐색 모드</h3>
+                    <select id="browseFolderSelect" onchange="onBrowseFolderChange()">
+                        <option value="">폴더를 선택하세요</option>
+                    </select>
+                    <div class="breadcrumb" id="breadcrumb"></div>
                 </div>
 
                 <!-- 폴더 필터 -->
@@ -914,7 +1522,7 @@
             <!-- Video Player -->
             <div class="player-container">
                 <div class="video-wrapper">
-                    <video id="videoPlayer" controls playsinline webkit-playsinline>
+                    <video id="videoPlayer" controls playsinline webkit-playsinline muted>
                         <source id="videoSource" src="" type="video/mp4">
                         브라우저가 비디오 태그를 지원하지 않습니다.
                     </video>
@@ -950,10 +1558,7 @@
                 </div>
 
                 <div class="controls">
-                    <button class="control-btn" onclick="skipBackward()">⏪ 10초 뒤로</button>
-                    <button class="control-btn" onclick="skipForward()">⏩ 10초 앞으로</button>
-                    <button class="control-btn" onclick="toggleFullscreen()">🖥️ 전체화면</button>
-                    <button class="control-btn" onclick="togglePlayPause()">⏯️ 재생/일시정지</button>
+                    <button class="control-btn" onclick="startFullscreenViewerFromList()" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; font-weight: 600;">🎬 전체화면 뷰어</button>
                     <button class="control-btn" id="silentPlaylistBtn" onclick="toggleSilentPlaylist()" style="background: #6c757d; color: white;">🔇 무소음 전체재생: OFF</button>
                     <button class="control-btn" id="hlsBtn" onclick="toggleHLS()" style="background: #28a745; color: white;">📡 HLS: OFF</button>
                     <button class="control-btn" id="transcodeBtn" onclick="toggleTranscode()" style="background: #ffc107; color: #333;">📱 트랜스코딩: OFF</button>
@@ -1000,6 +1605,91 @@
         </div>
     </div>
 
+    <!-- 이미지 뷰어 오버레이 -->
+    <div class="image-viewer-overlay" id="imageViewerOverlay" onclick="closeImageViewer()">
+        <div class="image-viewer-content" onclick="event.stopPropagation()">
+            <button class="image-viewer-close" onclick="closeImageViewer()">✕</button>
+            <img id="imageViewerImg" src="" alt="이미지">
+            <div class="image-viewer-name" id="imageViewerName"></div>
+        </div>
+    </div>
+
+    <!-- 전체 화면 뷰어 -->
+    <div class="fullscreen-viewer" id="fullscreenViewer">
+        <div class="viewer-header">
+            <div style="display: flex; align-items: center; flex: 1; min-width: 0;">
+                <span class="viewer-title" id="viewerTitle">파일명</span>
+                <span class="viewer-counter" id="viewerCounter">1 / 10</span>
+            </div>
+            <div class="viewer-actions">
+                <button class="viewer-btn" id="controlLockBtn" onclick="toggleControlLock()" title="컨트롤 고정/해제">
+                    <span id="controlLockIcon">🔓</span>
+                </button>
+                <button class="viewer-btn" onclick="closeFullscreenViewer()">
+                    ✕ 닫기
+                </button>
+            </div>
+        </div>
+
+        <div class="viewer-content">
+            <button class="viewer-nav-btn prev" id="viewerPrevBtn" onclick="viewerNavigate(-1)">‹</button>
+            <div class="viewer-media-container" id="viewerMediaContainer">
+                <!-- 여기에 이미지 또는 비디오가 동적으로 추가됩니다 -->
+            </div>
+            <button class="viewer-nav-btn next" id="viewerNextBtn" onclick="viewerNavigate(1)">›</button>
+
+            <!-- 폴더 뷰 -->
+            <div class="viewer-folder-view" id="viewerFolderView">
+                <div class="folder-icon-large">📁</div>
+                <div class="folder-name-large" id="folderNameLarge">폴더 이름</div>
+                <div class="folder-actions">
+                    <button class="folder-action-btn enter" onclick="enterFolderInViewer()">
+                        📂 들어가기
+                    </button>
+                    <button class="folder-action-btn skip" onclick="skipFolder()">
+                        ⏭️ 다음으로
+                    </button>
+                </div>
+            </div>
+
+            <!-- 액션 오버레이 -->
+            <div class="viewer-action-overlay" id="viewerActionOverlay">
+                <div class="overlay-handle" onclick="toggleActionOverlay()"></div>
+                <div class="action-row" style="gap: 5px;">
+                    <button class="action-btn-large" style="flex: 0 0 auto; padding: 14px 16px; font-size: 0.9em;" onclick="changePlaybackSpeed(0.5)">
+                        0.5x
+                    </button>
+                    <button class="action-btn-large" style="flex: 0 0 auto; padding: 14px 16px; font-size: 0.9em;" onclick="changePlaybackSpeed(1.0)">
+                        1x
+                    </button>
+                    <button class="action-btn-large" style="flex: 0 0 auto; padding: 14px 16px; font-size: 0.9em;" onclick="changePlaybackSpeed(1.5)">
+                        1.5x
+                    </button>
+                    <button class="action-btn-large" style="flex: 0 0 auto; padding: 14px 16px; font-size: 0.9em;" onclick="changePlaybackSpeed(2.0)">
+                        2x
+                    </button>
+                </div>
+                <div class="action-row">
+                    <select class="viewer-move-select" id="viewerMoveTarget">
+                        <option value="">이동할 폴더 선택</option>
+                    </select>
+                </div>
+                <div class="action-row">
+                    <button class="action-btn-large move-btn" onclick="moveCurrentFile()">
+                        📁 이동
+                    </button>
+                    <button class="action-btn-large delete-btn" onclick="deleteCurrentFile()">
+                        🗑️ 삭제
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="viewer-info" id="viewerInfo">
+            터치: 좌우 스와이프 (이전/다음) | 탭하여 컨트롤 표시/숨김 | 키보드: ↑ 이동, ↓ 삭제
+        </div>
+    </div>
+
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
         const videoSource = document.getElementById('videoSource');
@@ -1022,6 +1712,10 @@
         let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
+
+        // 화면 자동 꺼짐 방지 (requestAnimationFrame 사용)
+        let wakeLockInterval = null;
+        let wakeLockEnabled = false;
         let historyLoaded = false;
         let historyLoading = null;
         let playbackHistory = new Map();
@@ -1034,6 +1728,20 @@
         // 구간 편집 관련 변수
         let editSegments = [];  // 삭제할 구간들 [{start: 0, end: 10}, ...]
         let currentSegmentStart = null;  // 현재 마킹 중인 구간의 시작점
+
+        // 브라우징 모드 관련 변수
+        let isBrowseMode = false;  // 폴더 탐색 모드 여부
+        let browseFolder = '';  // 현재 탐색 중인 폴더명
+        let browsePath = '';  // 현재 탐색 중인 경로
+        let browseItems = [];  // 현재 표시 중인 아이템들
+
+        // 전체 화면 뷰어 관련 변수
+        let viewerActive = false;  // 뷰어 활성화 여부
+        let viewerItems = [];  // 뷰어에서 볼 수 있는 아이템들 (이미지+영상)
+        let viewerCurrentIndex = 0;  // 현재 보고 있는 아이템 인덱스
+        let currentViewerPlaybackRate = 1.0;  // 현재 재생 배속
+        let viewerControlsHideTimer = null;  // 컨트롤 자동 숨김 타이머
+        let viewerControlsLocked = false;  // 컨트롤 고정 상태 (true: 항상 표시, false: 자동 숨김)
 
         // 브라우저가 지원하지 않을 수 있는 확장자 목록
         const LEGACY_FORMATS = ['.rm', '.rmvb', '.vob', '.dat', '.mod', '.tod', '.mxf', '.divx', '.flv', '.wmv', '.asf'];
@@ -1175,6 +1883,47 @@
             }
             displayFolders();
             loadVideos();
+        }
+
+        // 브라우징 모드에서 폴더 삭제
+        async function deleteBrowseFolder(folderName, event) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            // 확인 메시지 (폴더 삭제는 중요한 작업이므로)
+            const confirmed = confirm(`"${folderName}" 폴더를 삭제하시겠습니까?\n\n폴더 내의 모든 파일과 하위 폴더도 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`);
+
+            if (!confirmed) {
+                return;
+            }
+
+            // 삭제할 폴더의 전체 경로 구성
+            const subfolderPath = browsePath ? `${browsePath}/${folderName}` : folderName;
+
+            try {
+                const response = await fetch('/api/delete-folder', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder_name: browseFolder,
+                        subfolder_path: subfolderPath
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || '폴더 삭제에 실패했습니다.');
+                }
+
+                // 삭제 성공 시 현재 디렉토리 다시 로드
+                await loadBrowseDirectory();
+
+                alert(`"${folderName}" 폴더가 삭제되었습니다.`);
+            } catch (error) {
+                alert('폴더 삭제 중 오류가 발생했습니다: ' + error.message);
+                console.error('Browse folder delete error:', error);
+            }
         }
 
         // 영상 목록 불러오기
@@ -1507,7 +2256,7 @@
                     ? `${video.thumbnail_url.includes('?') ? '&' : '?'}v=${thumbnailVersion}`
                     : '';
                 const thumbContent = hasThumbnail
-                    ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="${escapeHtml(video.name)} 썸네일" loading="lazy">`
+                    ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="${escapeHtml(video.name)} 썸네일" loading="lazy" onload="setThumbOrientation(this)">`
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                 const durationSec = Number(video.duration || 0);
                 const watchedPos = video.resume_position != null
@@ -1680,9 +2429,15 @@
             }
             // 일반 또는 트랜스코딩 재생
             else {
-                const endpoint = transcodeEnabled
-                    ? `/api/transcode/${encodeURIComponent(filename)}`
-                    : `/api/video/${encodeURIComponent(filename)}`;
+                let endpoint;
+                if (silentPlaylistEnabled) {
+                    // 무소음 모드: 오디오 트랙이 없는 스트림 사용 (백그라운드 음악 보호)
+                    endpoint = `/api/video-silent/${encodeURIComponent(filename)}`;
+                } else if (transcodeEnabled) {
+                    endpoint = `/api/transcode/${encodeURIComponent(filename)}`;
+                } else {
+                    endpoint = `/api/video/${encodeURIComponent(filename)}`;
+                }
 
                 videoSource.src = endpoint;
                 videoPlayer.load();
@@ -1891,6 +2646,28 @@
 
             prepareResumeForVideo(filename);
 
+            // iOS Safari에서 백그라운드 음악 보호를 위한 설정
+            videoPlayer.muted = true;
+            videoPlayer.volume = 0;
+            videoPlayer.setAttribute('muted', '');
+            videoPlayer.setAttribute('playsinline', '');
+            videoPlayer.setAttribute('webkit-playsinline', '');
+
+            // MediaSession API 완전 비활성화
+            if ('mediaSession' in navigator) {
+                try {
+                    navigator.mediaSession.playbackState = 'none';
+                    navigator.mediaSession.setActionHandler('play', null);
+                    navigator.mediaSession.setActionHandler('pause', null);
+                    navigator.mediaSession.setActionHandler('seekbackward', null);
+                    navigator.mediaSession.setActionHandler('seekforward', null);
+                    navigator.mediaSession.setActionHandler('previoustrack', null);
+                    navigator.mediaSession.setActionHandler('nexttrack', null);
+                } catch (e) {
+                    console.log('MediaSession 비활성화 실패:', e);
+                }
+            }
+
             // 기존 HLS 인스턴스 정리
             if (hls) {
                 hls.destroy();
@@ -1907,6 +2684,17 @@
                     videoPlayer.load();
 
                     videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                        // 항상 음소거 상태 유지 (백그라운드 음악 보호)
+                        videoPlayer.muted = true;
+                        videoPlayer.volume = 0;
+
+                        // 오디오 트랙 완전 비활성화 (백그라운드 음악 보호)
+                        if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
+                            for (let i = 0; i < videoPlayer.audioTracks.length; i++) {
+                                videoPlayer.audioTracks[i].enabled = false;
+                            }
+                        }
+
                         applySilentAudioState();
                         const startTime = resolveStartTime(seekTime);
                         if (startTime > 0 && !isNaN(videoPlayer.duration)) {
@@ -1930,6 +2718,17 @@
                     hls.attachMedia(videoPlayer);
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        // 항상 음소거 상태 유지 (백그라운드 음악 보호)
+                        videoPlayer.muted = true;
+                        videoPlayer.volume = 0;
+
+                        // 오디오 트랙 완전 비활성화 (백그라운드 음악 보호)
+                        if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
+                            for (let i = 0; i < videoPlayer.audioTracks.length; i++) {
+                                videoPlayer.audioTracks[i].enabled = false;
+                            }
+                        }
+
                         applySilentAudioState();
                         const startTime = resolveStartTime(seekTime);
                         if (startTime > 0 && !isNaN(videoPlayer.duration)) {
@@ -1946,14 +2745,31 @@
             }
             // 일반 또는 트랜스코딩 재생
             else {
-                const endpoint = transcodeEnabled
-                    ? `/api/transcode/${encodeURIComponent(filename)}`
-                    : `/api/video/${encodeURIComponent(filename)}`;
+                let endpoint;
+                if (silentPlaylistEnabled) {
+                    // 무소음 모드: 오디오 트랙이 없는 스트림 사용 (백그라운드 음악 보호)
+                    endpoint = `/api/video-silent/${encodeURIComponent(filename)}`;
+                } else if (transcodeEnabled) {
+                    endpoint = `/api/transcode/${encodeURIComponent(filename)}`;
+                } else {
+                    endpoint = `/api/video/${encodeURIComponent(filename)}`;
+                }
 
                 videoSource.src = endpoint;
                 videoPlayer.load();
 
                 videoPlayer.addEventListener('loadedmetadata', function onLoad() {
+                    // 항상 음소거 상태 유지 (백그라운드 음악 보호)
+                    videoPlayer.muted = true;
+                    videoPlayer.volume = 0;
+
+                    // 오디오 트랙 완전 비활성화 (백그라운드 음악 보호)
+                    if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
+                        for (let i = 0; i < videoPlayer.audioTracks.length; i++) {
+                            videoPlayer.audioTracks[i].enabled = false;
+                        }
+                    }
+
                     applySilentAudioState();
                     const startTime = resolveStartTime(seekTime);
                     if (startTime > 0 && !isNaN(videoPlayer.duration)) {
@@ -2108,7 +2924,7 @@
             }
         }
 
-        function startSilentPlaylist() {
+        async function startSilentPlaylist() {
             if (!videos || videos.length === 0) {
                 alert('재생할 영상이 없습니다. 폴더를 선택하거나 영상을 추가해주세요.');
                 return;
@@ -2125,18 +2941,71 @@
             updateSilentPlaylistButton();
             applySilentAudioState();
 
+            // 화면 자동 꺼짐 방지 활성화
+            requestWakeLock();
+
             const existingIndex = currentVideo ? silentPlaylist.indexOf(currentVideo) : -1;
             silentPlaylistIndex = existingIndex >= 0 ? existingIndex : 0;
-            playVideo(silentPlaylist[silentPlaylistIndex]);
+
+            // 첫 영상 자동 재생 (autoPlay=true)
+            await playVideoInternal(silentPlaylist[silentPlaylistIndex], 0, true);
         }
 
         function stopSilentPlaylist() {
             silentPlaylistEnabled = false;
             silentPlaylist = [];
             silentPlaylistIndex = -1;
-            restoreAudioState();
+            // 무소음 모드 종료 후에도 음소거 상태 유지
+            videoPlayer.muted = true;
+            videoPlayer.volume = 0;
+            videoPlayer.setAttribute('muted', '');
             updateSilentPlaylistButton();
+            releaseWakeLock();
         }
+
+        // 화면 자동 꺼짐 방지 활성화 (requestAnimationFrame 사용)
+        function requestWakeLock() {
+            if (wakeLockEnabled) {
+                return;
+            }
+
+            wakeLockEnabled = true;
+
+            // requestAnimationFrame 루프로 화면 활성 상태 유지
+            function keepAwake() {
+                if (!wakeLockEnabled) return;
+
+                // 화면 활성 상태 유지를 위한 더미 작업
+                const dummy = document.createElement('div');
+                dummy.style.position = 'fixed';
+                dummy.style.opacity = '0.001';
+                dummy.style.pointerEvents = 'none';
+                document.body.appendChild(dummy);
+                setTimeout(() => dummy.remove(), 0);
+
+                requestAnimationFrame(keepAwake);
+            }
+
+            keepAwake();
+            console.log('화면 자동 꺼짐 방지 활성화 (requestAnimationFrame)');
+        }
+
+        // 화면 꺼짐 방지 해제
+        function releaseWakeLock() {
+            if (!wakeLockEnabled) {
+                return;
+            }
+
+            wakeLockEnabled = false;
+            console.log('화면 자동 꺼짐 방지 해제');
+        }
+
+        // 페이지 visibility 변경 시 재활성화
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && silentPlaylistEnabled && !wakeLockEnabled) {
+                requestWakeLock();
+            }
+        });
 
         function handleSilentPlaylistProgress() {
             if (!silentPlaylistEnabled) return;
@@ -2146,7 +3015,8 @@
             }
 
             silentPlaylistIndex += 1;
-            playVideo(silentPlaylist[silentPlaylistIndex]);
+            // 다음 영상 자동 재생 (autoPlay=true)
+            playVideoInternal(silentPlaylist[silentPlaylistIndex], 0, true);
         }
 
         // 재생 기록 저장
@@ -2293,6 +3163,27 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        // 썸네일 이미지의 가로/세로 비율에 따라 클래스 설정
+        function setThumbOrientation(img) {
+            const parentThumb = img.closest('.video-thumb');
+            if (!parentThumb) return;
+
+            // 이미지 로드 완료 후 실제 크기 확인
+            const width = img.naturalWidth;
+            const height = img.naturalHeight;
+
+            if (width && height) {
+                // 가로가 세로보다 크면 landscape, 아니면 portrait
+                if (width > height) {
+                    parentThumb.classList.add('landscape');
+                    parentThumb.classList.remove('portrait');
+                } else {
+                    parentThumb.classList.add('portrait');
+                    parentThumb.classList.remove('landscape');
+                }
+            }
         }
 
         // 파일 크기 포맷
@@ -2519,6 +3410,863 @@
                     console.error('Progress check error:', error);
                 }
             }, 1000);  // 1초마다 확인
+        }
+
+        // ==================== 브라우징 모드 기능 ====================
+
+        function toggleBrowseMode() {
+            isBrowseMode = !isBrowseMode;
+            const btn = document.getElementById('browseModeBtn');
+            const browseControls = document.getElementById('browseControls');
+            const folderFilter = document.getElementById('folderFilter');
+
+            if (isBrowseMode) {
+                btn.textContent = '📋 목록 모드';
+                btn.classList.add('active');
+                browseControls.style.display = 'block';
+                folderFilter.style.display = 'none';
+
+                // 폴더 목록을 select에 추가
+                const select = document.getElementById('browseFolderSelect');
+                select.innerHTML = '<option value="">폴더를 선택하세요</option>';
+                folders.forEach(folder => {
+                    const option = document.createElement('option');
+                    option.value = folder.name;
+                    option.textContent = `${folder.name} (${folder.count}개)`;
+                    select.appendChild(option);
+                });
+
+                // 영상 목록 숨기기
+                document.getElementById('videoList').innerHTML = '<div class="no-video">폴더를 선택하여 탐색을 시작하세요.</div>';
+            } else {
+                btn.textContent = '📁 폴더 탐색';
+                btn.classList.remove('active');
+                browseControls.style.display = 'none';
+                folderFilter.style.display = 'block';
+
+                // 원래 목록으로 되돌리기
+                loadVideos();
+            }
+        }
+
+        function onBrowseFolderChange() {
+            const select = document.getElementById('browseFolderSelect');
+            browseFolder = select.value;
+            browsePath = '';
+
+            if (browseFolder) {
+                loadBrowseDirectory();
+            } else {
+                document.getElementById('videoList').innerHTML = '<div class="no-video">폴더를 선택하여 탐색을 시작하세요.</div>';
+                document.getElementById('breadcrumb').innerHTML = '';
+            }
+        }
+
+        async function loadBrowseDirectory() {
+            const container = document.getElementById('videoList');
+            container.innerHTML = '<div class="loading">로딩 중...</div>';
+
+            try {
+                const params = new URLSearchParams({
+                    folder: browseFolder,
+                    path: browsePath
+                });
+
+                const response = await fetch(`/api/browse?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error('폴더를 불러오는데 실패했습니다.');
+                }
+
+                const data = await response.json();
+                browseItems = data.items || [];
+                updateBreadcrumb(data.parent_path);
+                displayBrowseItems(browseItems);
+            } catch (error) {
+                container.innerHTML = '<div class="error">폴더를 불러오는데 실패했습니다.</div>';
+                console.error('Error loading browse directory:', error);
+            }
+        }
+
+        function updateBreadcrumb(parentPath) {
+            const breadcrumb = document.getElementById('breadcrumb');
+
+            if (!browsePath) {
+                breadcrumb.innerHTML = `<span class="breadcrumb-item">${escapeHtml(browseFolder)}</span>`;
+                return;
+            }
+
+            const parts = browsePath.split('/').filter(p => p);
+            let html = `<span class="breadcrumb-item" onclick="navigateToBreadcrumb('')">${escapeHtml(browseFolder)}</span>`;
+
+            let currentPath = '';
+            parts.forEach((part, index) => {
+                currentPath += (currentPath ? '/' : '') + part;
+                html += `<span class="breadcrumb-separator">/</span>`;
+                html += `<span class="breadcrumb-item" onclick="navigateToBreadcrumb('${escapeHtml(currentPath)}')">${escapeHtml(part)}</span>`;
+            });
+
+            breadcrumb.innerHTML = html;
+        }
+
+        function navigateToBreadcrumb(path) {
+            browsePath = path;
+            loadBrowseDirectory();
+        }
+
+        function displayBrowseItems(items) {
+            const container = document.getElementById('videoList');
+
+            if (!items || items.length === 0) {
+                container.innerHTML = '<div class="no-video">이 폴더는 비어있습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = items.map(item => {
+                if (item.type === 'folder') {
+                    return `
+                        <div class="video-item folder-item" onclick="enterFolder('${escapeHtml(item.name)}')">
+                            <div class="video-meta">
+                                <div class="video-item-name">
+                                    <span class="folder-icon">📁</span>${escapeHtml(item.name)}
+                                </div>
+                            </div>
+                            <button class="browse-folder-delete-btn" onclick="deleteBrowseFolder('${escapeHtml(item.name)}', event)" title="폴더 삭제">🗑️ 삭제</button>
+                        </div>
+                    `;
+                } else if (item.type === 'video') {
+                    const bitrateText = formatBitrate(item.bitrate);
+                    const thumbnailVersion = item.modified ? encodeURIComponent(item.modified) : '';
+                    const hasThumbnail = Boolean(item.thumbnail_url);
+                    const versionSuffix = hasThumbnail && thumbnailVersion
+                        ? `${item.thumbnail_url.includes('?') ? '&' : '?'}v=${thumbnailVersion}`
+                        : '';
+                    const thumbContent = hasThumbnail
+                        ? `<img src="${item.thumbnail_url}${versionSuffix}" alt="${escapeHtml(item.name)} 썸네일" loading="lazy" onload="setThumbOrientation(this)">`
+                        : `<div class="thumb-placeholder">${item.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
+                    const extensionLabel = item.extension ? item.extension.replace('.', '').toUpperCase() : '';
+
+                    const fullPath = browsePath ? `${browsePath}/${item.name}` : item.name;
+
+                    return `
+                        <div class="video-item" onclick="playBrowseVideo('${escapeHtml(fullPath)}', event)">
+                            <div class="thumb-stack">
+                                <div class="video-thumb">${thumbContent}</div>
+                                <div class="thumb-caption">
+                                    ${extensionLabel ? `<span class="thumb-chip">${extensionLabel}</span>` : ''}
+                                    ${bitrateText ? `<span class="thumb-chip">${bitrateText}</span>` : ''}
+                                    ${item.video_codec_info ? `<span class="thumb-chip">🎞 ${escapeHtml(item.video_codec_info)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="video-meta">
+                                <div class="video-item-name">${escapeHtml(item.name)}</div>
+                                <div class="meta-subline">
+                                    ${extensionLabel ? `<span class="info-chip"><span class="label">확장</span>${extensionLabel}</span>` : ''}
+                                    ${bitrateText ? `<span class="info-chip"><span class="label">비트</span>${bitrateText}</span>` : ''}
+                                    <span class="info-chip"><span class="label">크기</span>${formatFileSize(item.size)}</span>
+                                </div>
+                                <div class="meta-subline">
+                                    ${item.video_codec_info ? `<span class="codec-chip">🎞 ${escapeHtml(item.video_codec_info)}</span>` : ''}
+                                    ${item.audio_codec_info ? `<span class="codec-chip">🔊 ${escapeHtml(item.audio_codec_info)}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (item.type === 'image') {
+                    const extensionLabel = item.extension ? item.extension.replace('.', '').toUpperCase() : '';
+                    const fullPath = browsePath ? `${browsePath}/${item.name}` : item.name;
+
+                    return `
+                        <div class="video-item image-item" onclick="viewImage('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')">
+                            <div class="video-meta">
+                                <div class="video-item-name">
+                                    <span class="folder-icon">🖼️</span>${escapeHtml(item.name)}
+                                </div>
+                                <div class="meta-subline">
+                                    ${extensionLabel ? `<span class="info-chip"><span class="label">확장</span>${extensionLabel}</span>` : ''}
+                                    <span class="info-chip"><span class="label">크기</span>${formatFileSize(item.size)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return '';
+            }).join('');
+        }
+
+        function enterFolder(folderName) {
+            browsePath = browsePath ? `${browsePath}/${folderName}` : folderName;
+            loadBrowseDirectory();
+        }
+
+        function playBrowseVideo(relativePath, event) {
+            // 전체 화면 뷰어에서 열기 (폴더 포함)
+            const fileName = relativePath.split('/').pop();
+            viewerItems = [...browseItems];  // 모든 아이템 포함
+            const clickedItem = browseItems.find(item => item.name === fileName);
+            if (clickedItem) {
+                viewerCurrentIndex = viewerItems.findIndex(item => item.name === clickedItem.name);
+            } else {
+                viewerCurrentIndex = 0;
+            }
+
+            openFullscreenViewer();
+        }
+
+        function viewImage(relativePath, imageName) {
+            // 전체 화면 뷰어에서 열기 (폴더 포함)
+            viewerItems = [...browseItems];  // 모든 아이템 포함 (폴더, 이미지, 영상)
+            const clickedItem = browseItems.find(item => item.name === imageName);
+            if (clickedItem) {
+                viewerCurrentIndex = viewerItems.findIndex(item => item.name === clickedItem.name);
+            } else {
+                viewerCurrentIndex = 0;
+            }
+
+            openFullscreenViewer();
+        }
+
+        function closeImageViewer() {
+            const overlay = document.getElementById('imageViewerOverlay');
+            overlay.style.display = 'none';
+        }
+
+        // ==================== 전체 화면 뷰어 기능 ====================
+
+        async function openFullscreenViewer() {
+            if (viewerItems.length === 0) {
+                alert('볼 수 있는 파일이 없습니다.');
+                return;
+            }
+
+            // 메인 비디오 플레이어 완전 정지
+            if (videoPlayer) {
+                videoPlayer.pause();
+                videoPlayer.currentTime = 0;
+
+                // iOS 전체화면 강제 해제
+                try {
+                    if (videoPlayer.webkitExitFullscreen) {
+                        videoPlayer.webkitExitFullscreen();
+                    }
+                    if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                } catch (e) {
+                    // 무시
+                }
+            }
+
+            viewerActive = true;
+            const viewer = document.getElementById('fullscreenViewer');
+            viewer.classList.add('active');
+
+            // body 스크롤 방지 (iOS 대응)
+            document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.width = '100%';
+
+            // 이동 대상 폴더 목록 추가
+            const moveSelect = document.getElementById('viewerMoveTarget');
+            moveSelect.innerHTML = '<option value="">이동할 폴더 선택</option>';
+            if (moveTargets && moveTargets.length > 0) {
+                moveTargets.forEach(target => {
+                    const option = document.createElement('option');
+                    option.value = target.name;
+                    option.textContent = target.name;
+                    moveSelect.appendChild(option);
+                });
+            }
+
+            displayViewerItem();
+            setupViewerKeyboardShortcuts();
+            setupTouchGestures();
+
+            // 컨트롤 자동 숨김 타이머 시작
+            resetViewerControlsTimer();
+        }
+
+        function closeFullscreenViewer() {
+            viewerActive = false;
+            const viewer = document.getElementById('fullscreenViewer');
+            viewer.classList.remove('active');
+
+            // 컨트롤 자동 숨김 타이머 취소
+            if (viewerControlsHideTimer) {
+                clearTimeout(viewerControlsHideTimer);
+                viewerControlsHideTimer = null;
+            }
+
+            // 컨트롤 고정 상태 초기화
+            viewerControlsLocked = false;
+            const lockIcon = document.getElementById('controlLockIcon');
+            const lockBtn = document.getElementById('controlLockBtn');
+            if (lockIcon) lockIcon.textContent = '🔓';
+            if (lockBtn) lockBtn.style.background = '';
+
+            // 컨트롤 다시 보이게 (다음에 열었을 때를 위해)
+            const overlay = document.getElementById('viewerActionOverlay');
+            const header = document.querySelector('.fullscreen-viewer .viewer-header');
+            const navBtns = document.querySelectorAll('.fullscreen-viewer .viewer-nav-btn');
+            if (overlay) overlay.classList.remove('hidden');
+            if (header) header.classList.remove('hidden');
+            navBtns.forEach(btn => btn.classList.remove('hidden'));
+
+            // body 스크롤 복원
+            document.body.style.overflow = '';
+            document.body.style.position = '';
+            document.body.style.width = '';
+
+            // 비디오가 재생 중이면 정지
+            const container = document.getElementById('viewerMediaContainer');
+            const video = container.querySelector('video');
+            if (video) {
+                video.pause();
+                video.src = '';
+            }
+
+            removeViewerKeyboardShortcuts();
+        }
+
+        function displayViewerItem() {
+            if (!viewerItems || viewerItems.length === 0) {
+                closeFullscreenViewer();
+                return;
+            }
+
+            const item = viewerItems[viewerCurrentIndex];
+            const container = document.getElementById('viewerMediaContainer');
+            const folderView = document.getElementById('viewerFolderView');
+            const actionOverlay = document.getElementById('viewerActionOverlay');
+            const title = document.getElementById('viewerTitle');
+            const counter = document.getElementById('viewerCounter');
+            const prevBtn = document.getElementById('viewerPrevBtn');
+            const nextBtn = document.getElementById('viewerNextBtn');
+
+            // 타이틀 및 카운터 업데이트
+            title.textContent = item.name;
+            counter.textContent = `${viewerCurrentIndex + 1} / ${viewerItems.length}`;
+
+            // 네비게이션 버튼 상태
+            prevBtn.disabled = viewerCurrentIndex === 0;
+            nextBtn.disabled = viewerCurrentIndex === viewerItems.length - 1;
+
+            // 미디어 표시
+            container.innerHTML = '';
+            folderView.classList.remove('active');
+
+            if (item.type === 'folder') {
+                // 폴더 표시
+                const folderNameLarge = document.getElementById('folderNameLarge');
+                folderNameLarge.textContent = item.name;
+                folderView.classList.add('active');
+                actionOverlay.style.display = 'none';
+            } else {
+                actionOverlay.style.display = 'flex';
+
+                if (item.type === 'image') {
+                    const fullPath = browsePath ? `${browsePath}/${item.name}` : item.name;
+                    const folderName = browseFolder || (item.folder ? item.folder : '');
+                    const imageUrl = `/api/image/${encodeURIComponent(folderName)}/${encodeURIComponent(fullPath)}`;
+                    const img = document.createElement('img');
+                    img.src = imageUrl;
+                    img.alt = item.name;
+                    container.appendChild(img);
+                } else if (item.type === 'video') {
+                    const fullPath = item.folder ? item.name : (browsePath ? `${browsePath}/${item.name}` : item.name);
+                    const videoUrl = `/api/video/${encodeURIComponent(fullPath)}`;
+                    const video = document.createElement('video');
+
+                    // iOS 인라인 재생을 위한 모든 속성 설정
+                    video.setAttribute('playsinline', '');
+                    video.setAttribute('webkit-playsinline', '');
+                    video.setAttribute('x-webkit-airplay', 'allow');
+                    video.controls = true;
+                    video.autoplay = true;
+                    video.muted = false;
+                    video.id = 'viewerVideo';
+
+                    const source = document.createElement('source');
+                    source.src = videoUrl;
+                    source.type = 'video/mp4';
+
+                    video.appendChild(source);
+                    container.appendChild(video);
+
+                    // 저장된 배속 적용
+                    if (typeof currentViewerPlaybackRate !== 'undefined') {
+                        video.playbackRate = currentViewerPlaybackRate;
+                    }
+
+                    // iOS에서 자동재생 시 전체화면 방지
+                    video.addEventListener('webkitbeginfullscreen', function(e) {
+                        e.preventDefault();
+                        video.pause();
+                        setTimeout(() => {
+                            if (video.webkitExitFullscreen) {
+                                video.webkitExitFullscreen();
+                            }
+                            video.play();
+                        }, 100);
+                    }, false);
+                }
+            }
+        }
+
+        function viewerNavigate(direction) {
+            const newIndex = viewerCurrentIndex + direction;
+            if (newIndex >= 0 && newIndex < viewerItems.length) {
+                viewerCurrentIndex = newIndex;
+                displayViewerItem();
+
+                // 네비게이션 후 컨트롤 보이고 타이머 리셋
+                showViewerControls();
+            }
+        }
+
+        async function deleteCurrentFile() {
+            if (!viewerItems || viewerItems.length === 0) return;
+
+            const item = viewerItems[viewerCurrentIndex];
+
+            // 폴더는 삭제할 수 없음
+            if (item.type === 'folder') {
+                return; // 조용히 무시
+            }
+
+            const fullPath = item.folder ? `${item.name}` : (browsePath ? `${browsePath}/${item.name}` : item.name);
+
+            try {
+                const response = await fetch(`/api/delete/${encodeURIComponent(fullPath)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 아이템 목록에서 제거
+                    viewerItems.splice(viewerCurrentIndex, 1);
+                    if (browseItems && browseItems.length > 0) {
+                        browseItems = browseItems.filter(i => i.name !== item.name);
+                    }
+                    if (videos && videos.length > 0) {
+                        videos = videos.filter(v => v.name !== item.name);
+                    }
+
+                    if (viewerItems.length === 0) {
+                        // 더 이상 아이템이 없으면 닫기
+                        closeFullscreenViewer();
+                        if (isBrowseMode) {
+                            loadBrowseDirectory();
+                        } else {
+                            loadVideos();
+                        }
+                    } else {
+                        // 다음 아이템으로 자동 이동
+                        if (viewerCurrentIndex >= viewerItems.length) {
+                            viewerCurrentIndex = viewerItems.length - 1;
+                        }
+                        displayViewerItem();
+                    }
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+            }
+        }
+
+        async function moveCurrentFile() {
+            if (!viewerItems || viewerItems.length === 0) return;
+
+            const item = viewerItems[viewerCurrentIndex];
+
+            // 폴더는 이동할 수 없음
+            if (item.type === 'folder') {
+                return; // 조용히 무시
+            }
+
+            const moveSelect = document.getElementById('viewerMoveTarget');
+            const targetName = moveSelect.value;
+
+            if (!targetName) {
+                return; // 폴더 선택 안 했으면 무시
+            }
+
+            const fullPath = item.folder ? `${item.name}` : (browsePath ? `${browsePath}/${item.name}` : item.name);
+
+            try {
+                const response = await fetch('/api/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filenames: [fullPath],
+                        target: targetName
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success || (result.moved && result.moved.length > 0)) {
+                    // 아이템 목록에서 제거
+                    viewerItems.splice(viewerCurrentIndex, 1);
+                    if (browseItems && browseItems.length > 0) {
+                        browseItems = browseItems.filter(i => i.name !== item.name);
+                    }
+                    if (videos && videos.length > 0) {
+                        videos = videos.filter(v => v.name !== item.name);
+                    }
+
+                    if (viewerItems.length === 0) {
+                        // 더 이상 아이템이 없으면 닫기
+                        closeFullscreenViewer();
+                        if (isBrowseMode) {
+                            loadBrowseDirectory();
+                        } else {
+                            loadVideos();
+                        }
+                    } else {
+                        // 다음 아이템으로 자동 이동
+                        if (viewerCurrentIndex >= viewerItems.length) {
+                            viewerCurrentIndex = viewerItems.length - 1;
+                        }
+                        displayViewerItem();
+                    }
+                }
+            } catch (error) {
+                console.error('Move error:', error);
+            }
+        }
+
+        let viewerKeyboardHandler = null;
+
+        function setupViewerKeyboardShortcuts() {
+            viewerKeyboardHandler = function(e) {
+                if (!viewerActive) return;
+
+                switch(e.key) {
+                    case 'Escape':
+                        e.preventDefault();
+                        closeFullscreenViewer();
+                        break;
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        viewerNavigate(-1);
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        viewerNavigate(1);
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        moveCurrentFile();
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        deleteCurrentFile();
+                        break;
+                    case 'Delete':
+                        e.preventDefault();
+                        deleteCurrentFile();
+                        break;
+                }
+            };
+
+            document.addEventListener('keydown', viewerKeyboardHandler);
+        }
+
+        function removeViewerKeyboardShortcuts() {
+            if (viewerKeyboardHandler) {
+                document.removeEventListener('keydown', viewerKeyboardHandler);
+                viewerKeyboardHandler = null;
+            }
+        }
+
+        // 폴더 진입 기능
+        async function enterFolderInViewer() {
+            const item = viewerItems[viewerCurrentIndex];
+            if (item.type !== 'folder') return;
+
+            // 폴더로 진입
+            browsePath = browsePath ? `${browsePath}/${item.name}` : item.name;
+
+            // 새 디렉토리 로드
+            await loadBrowseDirectory();
+
+            // 뷰어 닫기
+            closeFullscreenViewer();
+        }
+
+        // 폴더 스킵 (다음으로)
+        function skipFolder() {
+            viewerNavigate(1);
+        }
+
+        // 액션 오버레이 토글 (헤더, 네비게이션 버튼 포함)
+        function toggleActionOverlay() {
+            const overlay = document.getElementById('viewerActionOverlay');
+            const header = document.querySelector('.fullscreen-viewer .viewer-header');
+            const navBtns = document.querySelectorAll('.fullscreen-viewer .viewer-nav-btn');
+
+            const isHidden = overlay.classList.contains('hidden');
+
+            if (isHidden) {
+                // 컨트롤 보이기
+                showViewerControls();
+            } else {
+                // 컨트롤 숨기기
+                hideViewerControls();
+            }
+        }
+
+        // 뷰어 컨트롤 보이기
+        function showViewerControls() {
+            const overlay = document.getElementById('viewerActionOverlay');
+            const header = document.querySelector('.fullscreen-viewer .viewer-header');
+            const navBtns = document.querySelectorAll('.fullscreen-viewer .viewer-nav-btn');
+
+            overlay.classList.remove('hidden');
+            if (header) {
+                header.classList.remove('hidden');
+            }
+            navBtns.forEach(btn => {
+                btn.classList.remove('hidden');
+            });
+
+            // 고정 모드가 아닐 때만 3초 후 자동 숨김
+            if (!viewerControlsLocked) {
+                resetViewerControlsTimer();
+            }
+        }
+
+        // 뷰어 컨트롤 숨기기
+        function hideViewerControls() {
+            const overlay = document.getElementById('viewerActionOverlay');
+            const header = document.querySelector('.fullscreen-viewer .viewer-header');
+            const navBtns = document.querySelectorAll('.fullscreen-viewer .viewer-nav-btn');
+
+            overlay.classList.add('hidden');
+            if (header) {
+                header.classList.add('hidden');
+            }
+            navBtns.forEach(btn => {
+                btn.classList.add('hidden');
+            });
+
+            // 타이머 취소
+            if (viewerControlsHideTimer) {
+                clearTimeout(viewerControlsHideTimer);
+                viewerControlsHideTimer = null;
+            }
+        }
+
+        // 컨트롤 자동 숨김 타이머 리셋
+        function resetViewerControlsTimer() {
+            // 컨트롤이 고정된 상태면 타이머 설정 안 함
+            if (viewerControlsLocked) {
+                return;
+            }
+
+            // 기존 타이머 취소
+            if (viewerControlsHideTimer) {
+                clearTimeout(viewerControlsHideTimer);
+            }
+
+            // 3초 후 자동 숨김
+            viewerControlsHideTimer = setTimeout(() => {
+                if (viewerActive && !viewerControlsLocked) {
+                    hideViewerControls();
+                }
+            }, 3000);
+        }
+
+        // 컨트롤 고정/해제 토글
+        function toggleControlLock() {
+            viewerControlsLocked = !viewerControlsLocked;
+
+            const lockIcon = document.getElementById('controlLockIcon');
+            const lockBtn = document.getElementById('controlLockBtn');
+
+            if (viewerControlsLocked) {
+                // 고정 모드: 컨트롤 항상 표시
+                lockIcon.textContent = '🔒';
+                lockBtn.style.background = 'rgba(102, 126, 234, 0.8)';
+
+                // 타이머 취소
+                if (viewerControlsHideTimer) {
+                    clearTimeout(viewerControlsHideTimer);
+                    viewerControlsHideTimer = null;
+                }
+
+                // 컨트롤 보이기
+                showViewerControls();
+            } else {
+                // 자동 숨김 모드
+                lockIcon.textContent = '🔓';
+                lockBtn.style.background = '';
+
+                // 타이머 시작
+                resetViewerControlsTimer();
+            }
+        }
+
+        // 배속 변경
+        function changePlaybackSpeed(speed) {
+            currentViewerPlaybackRate = speed;
+            const video = document.getElementById('viewerVideo');
+            if (video) {
+                video.playbackRate = speed;
+            }
+
+            // 배속 변경 후 타이머 리셋
+            resetViewerControlsTimer();
+        }
+
+        // 폴더 선택 모드에서 전체 화면 뷰어 시작
+        async function startFullscreenViewerFromList() {
+            if (!videos || videos.length === 0) {
+                alert('영상이 없습니다.');
+                return;
+            }
+
+            // 메인 비디오 플레이어 완전히 정지
+            if (videoPlayer) {
+                videoPlayer.pause();
+                videoPlayer.currentTime = 0;
+
+                // iOS 전체화면 강제 해제
+                try {
+                    if (videoPlayer.webkitExitFullscreen) {
+                        videoPlayer.webkitExitFullscreen();
+                    }
+                    if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                } catch (e) {
+                    // 무시
+                }
+
+                // src 제거하여 완전히 언로드
+                const source = videoPlayer.querySelector('source');
+                if (source) {
+                    source.src = '';
+                }
+                videoPlayer.load();
+            }
+
+            // videos 배열을 viewerItems로 복사 (folder 정보 포함)
+            viewerItems = videos.map(v => ({
+                ...v,
+                type: 'video'
+            }));
+            viewerCurrentIndex = 0;
+            browsePath = '';
+            browseFolder = '';
+
+            // 약간의 딜레이 후 뷰어 열기 (iOS 전체화면 해제 대기)
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            openFullscreenViewer();
+        }
+
+        // 터치 제스처 설정
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+        let isSwiping = false;
+        let touchGesturesSetup = false; // 중복 설정 방지
+
+        function setupTouchGestures() {
+            // 이미 설정된 경우 스킵
+            if (touchGesturesSetup) return;
+            touchGesturesSetup = true;
+
+            const viewer = document.getElementById('fullscreenViewer');
+            const viewerContent = document.querySelector('.fullscreen-viewer .viewer-content');
+
+            // 터치 시작
+            viewer.addEventListener('touchstart', (e) => {
+                if (!viewerActive) return;
+
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+                isSwiping = false;
+            }, { passive: true });
+
+            // 터치 이동
+            viewer.addEventListener('touchmove', (e) => {
+                if (!viewerActive) return;
+
+                const moveX = e.changedTouches[0].screenX;
+                const moveY = e.changedTouches[0].screenY;
+                const diffX = Math.abs(moveX - touchStartX);
+                const diffY = Math.abs(moveY - touchStartY);
+
+                // 수평 스와이프 감지 (세로보다 가로 이동이 클 때)
+                if (diffX > 10 && diffX > diffY) {
+                    isSwiping = true;
+                }
+            }, { passive: true });
+
+            // 터치 종료
+            viewer.addEventListener('touchend', (e) => {
+                if (!viewerActive) return;
+
+                touchEndX = e.changedTouches[0].screenX;
+                touchEndY = e.changedTouches[0].screenY;
+
+                handleSwipeGesture();
+
+                // 스와이프 상태 리셋 (다음 터치를 위해)
+                setTimeout(() => {
+                    isSwiping = false;
+                }, 100);
+            }, { passive: true });
+
+            // 탭하여 오버레이 토글 (viewer-content 영역 전체에 적용)
+            if (viewerContent) {
+                viewerContent.addEventListener('click', (e) => {
+                    if (!viewerActive) return;
+
+                    // 버튼 클릭은 제외 (비디오/이미지 자체는 허용)
+                    if (e.target.tagName === 'BUTTON') {
+                        return;
+                    }
+
+                    // 스와이프 중이 아닐 때만 토글
+                    if (!isSwiping) {
+                        toggleActionOverlay();
+                    }
+                });
+            }
+        }
+
+        function handleSwipeGesture() {
+            if (!isSwiping) return;
+
+            const swipeThreshold = 50; // 최소 스와이프 거리 (px)
+            const diffX = touchEndX - touchStartX;
+            const diffY = Math.abs(touchEndY - touchStartY);
+
+            // 세로 이동이 너무 크면 무시
+            if (diffY > 100) return;
+
+            if (Math.abs(diffX) > swipeThreshold) {
+                if (diffX > 0) {
+                    // 오른쪽 스와이프 - 이전
+                    viewerNavigate(-1);
+                } else {
+                    // 왼쪽 스와이프 - 다음
+                    viewerNavigate(1);
+                }
+            }
+
+            isSwiping = false;
         }
     </script>
 </body>

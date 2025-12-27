@@ -19,6 +19,8 @@ instance/
 history.json
 static/transcoded/
 static/thumbnails/
+static/hls/
+static/silent_videos/
 config.json
 
 # IDE

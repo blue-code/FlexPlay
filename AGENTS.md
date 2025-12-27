@@ -1,21 +1,21 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-FlexPlay centers on `app.py`, which wires Flask routes, FFmpeg helpers, edit tracking, and APScheduler tasks. UI markup stays in `templates/index.html`, while CSS/JS plus generated thumbnails live inside `static/`. Video sources belong in `videos/` or the folders described in `config.json`, and playback state is persisted in `history.json`. Use `setup.sh` and `run.sh` to manage the virtualenv; if backend logic grows, break helpers into `services/` or `utils/` modules and import them explicitly from `app.py`.
+`app.py` orchestrates Flask routes, FFmpeg helpers, edit tracking, and background APScheduler jobs, so keep new logic contained in helpers imported there. UI markup lives in `templates/index.html`, while CSS, JavaScript, and generated thumbnails stay under `static/`. Store sample or test media in `videos/` (or folders declared in `config.json`) and persist playback history in `history.json`. Future utilities should land in `services/` or `utils/` modules to keep the main app lean, and tests belong in `tests/` using the same import paths.
 
 ## Build, Test, and Development Commands
-- `./setup.sh` – creates/refreshes the `venv`, installs `requirements.txt`, and seeds `static/thumbnails/`; rerun after dependency changes.
-- `./run.sh` – activates the environment, performs quick folder checks, and serves the app on `http://localhost:7777`.
-- `source venv/bin/activate && python app.py` – faster debug loop for specific routes or background jobs; pair with `ffmpeg -version` to confirm transcoding support.
+- `./setup.sh` — provisions the virtualenv, installs `requirements.txt`, and primes `static/thumbnails/`; rerun after dependency bumps.
+- `./run.sh` — activates the env, checks folder health, and serves the app on `http://localhost:7777` for full-stack validation.
+- `source venv/bin/activate && python app.py` — fast feedback loop for individual routes or scheduler jobs; run `ffmpeg -version` in the same shell to confirm codec availability.
 
 ## Coding Style & Naming Conventions
-Write Python that follows PEP 8: 4-space indentation, `snake_case` for functions/variables, and short, descriptive helpers (`get_video_files`, `safe_join`). Keep route handlers lean by pushing heavy work into helpers, document non-obvious flows with concise docstrings, and prefer type hints for new utilities. When editing `templates/index.html`, reuse existing HTML semantics and CSS classes so the gradient layout and keyboard shortcuts remain intact.
+Follow PEP 8 with 4-space indentation and `snake_case` identifiers. Keep route handlers thin by delegating heavy lifting to helpers (e.g., `get_video_files`, `safe_join`), add concise docstrings for tricky flows, and prefer type hints for new utilities. Reuse existing HTML semantics and CSS classes inside `templates/index.html` so gradients, shortcuts, and responsive layouts stay intact.
 
 ## Testing Guidelines
-No automated suite ships yet, so create one whenever you touch routing, editing, or transcoding. Place tests in `tests/`, rely on `pytest` plus Flask’s `app.test_client()` for endpoint coverage, and mock filesystem/FFmpeg calls to keep runs deterministic. Execute `pytest -q` before submitting and summarize any manual video scenarios (e.g., editing large MKV) in the PR description.
+Adopt `pytest` with Flask’s `app.test_client()` for endpoint coverage; mock filesystem or FFmpeg calls to keep runs deterministic. Place tests under `tests/`, mirror the module name in test files, and document any manual video checks (e.g., editing a large MKV). Run `pytest -q` before opening a PR and capture logs for regressions in background jobs.
 
 ## Commit & Pull Request Guidelines
-Commits should be small and imperative—mirror the existing `Initial commit: FlexPlay - Flexible Video Player` style (e.g., `Add edit progress polling`). Each PR must include a summary, testing evidence, screenshots or GIFs for UI tweaks, migration notes for `config.json`, and a mention of new dependencies. Reference related issues or TODO items so reviewers can trace intent quickly.
+Write small, imperative commits similar to `Add edit progress polling` so reviewers can follow intent. Every PR should include a summary, test evidence, screenshots or GIFs for UI changes, migration notes for `config.json`, and disclosure of new dependencies. Link related issues or TODOs and describe any scheduler or FFmpeg behavior changes to avoid conflicts with the cache cleanup task.
 
 ## Security & Configuration Tips
-Do not commit personal media, actual `config.json`, or secrets; update `config.json.example` instead. Always reuse helpers like `safe_join` when touching the filesystem, validate user input before invoking FFmpeg, and document any new background schedulers so they do not conflict with the existing cache cleanup job.
+Never commit personal media, secrets, or a real `config.json`; update `config.json.example` instead. Always use `safe_join` or other vetted helpers when touching the filesystem, validate incoming parameters before invoking FFmpeg, and document new background schedulers so they coexist with existing maintenance jobs.
