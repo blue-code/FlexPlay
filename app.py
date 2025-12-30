@@ -2042,21 +2042,6 @@ scheduler.start()
 if __name__ == '__main__':
     try:
         print(f"🗑️  캐시 자동 정리: {cleanup_interval_hours}시간마다 실행 (최대 {settings['max_age_days']}일, {settings['max_size_gb']}GB)")
-
-        # SSL 자체 서명 인증서 사용 (HTTPS - iOS Wake Lock API 지원)
-        import os
-        cert_path = os.path.join(os.path.dirname(__file__), 'cert.pem')
-        key_path = os.path.join(os.path.dirname(__file__), 'key.pem')
-
-        if os.path.exists(cert_path) and os.path.exists(key_path):
-            print("🔒 HTTPS 활성화 (자체 서명 인증서)")
-            print(f"📱 iPad Safari에서 https://[서버IP]:7777 접속")
-            print(f"⚠️  브라우저 경고 화면에서 '계속 진행' 클릭")
-            app.run(debug=True, host='0.0.0.0', port=7777, threaded=True,
-                    ssl_context=(cert_path, key_path))
-        else:
-            print("⚠️  SSL 인증서가 없습니다. HTTP로 실행 (Wake Lock API 사용 불가)")
-            print("💡 인증서 생성: openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365")
-            app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
+        app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()

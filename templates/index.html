@@ -1522,7 +1522,14 @@
             <!-- Video Player -->
             <div class="player-container">
                 <div class="video-wrapper">
-                    <video id="videoPlayer" controls playsinline webkit-playsinline muted>
+                    <video id="videoPlayer" controls
+                           playsinline
+                           webkit-playsinline
+                           x5-playsinline
+                           x5-video-player-type="h5"
+                           x-webkit-airplay="allow"
+                           preload="metadata"
+                           muted>
                         <source id="videoSource" src="" type="video/mp4">
                         브라우저가 비디오 태그를 지원하지 않습니다.
                     </video>
@@ -1713,9 +1720,8 @@
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
 
-        // 화면 자동 꺼짐 방지 (Wake Lock API - HTTPS 필수)
-        let wakeLock = null;
-        let wakeLockSupported = 'wakeLock' in navigator;
+        // 화면 자동 꺼짐 방지: iOS Safari는 비디오 재생 중 자동으로 화면 유지
+        // 추가 속성 (playsinline, x5-playsinline, x-webkit-airplay 등)으로 강화
         let historyLoaded = false;
         let historyLoading = null;
         let playbackHistory = new Map();
@@ -3055,55 +3061,15 @@
             releaseWakeLock();
         }
 
-        // 화면 자동 꺼짐 방지 활성화 (Wake Lock API - HTTPS 필수)
-        async function requestWakeLock() {
-            if (!wakeLockSupported) {
-                console.log('Wake Lock API가 지원되지 않습니다.');
-                return;
-            }
-
-            if (wakeLock !== null) {
-                console.log('Wake Lock이 이미 활성화되어 있습니다.');
-                return;
-            }
-
-            try {
-                wakeLock = await navigator.wakeLock.request('screen');
-                console.log('화면 자동 꺼짐 방지 활성화 (Wake Lock API)');
-
-                // Wake Lock 해제 이벤트 리스너
-                wakeLock.addEventListener('release', () => {
-                    console.log('Wake Lock이 해제되었습니다.');
-                    wakeLock = null;
-                });
-            } catch (err) {
-                console.error('Wake Lock 요청 실패:', err);
-                wakeLock = null;
-            }
+        // 화면 자동 꺼짐 방지: 비디오 재생 중에는 iOS가 자동으로 화면 유지
+        // 비디오 요소의 강화된 속성 (playsinline, x5-playsinline 등)으로 처리
+        function requestWakeLock() {
+            console.log('[Wake Lock] 비디오 재생 중 화면 유지 (네이티브 동작)');
         }
 
-        // 화면 꺼짐 방지 해제
-        async function releaseWakeLock() {
-            if (wakeLock !== null) {
-                try {
-                    await wakeLock.release();
-                    wakeLock = null;
-                    console.log('화면 자동 꺼짐 방지 해제');
-                } catch (err) {
-                    console.error('Wake Lock 해제 실패:', err);
-                }
-            }
+        function releaseWakeLock() {
+            console.log('[Wake Lock] 화면 유지 해제');
         }
-
-        // 페이지 visibility 변경 시 재활성화 (Wake Lock API는 자동으로 복원됨)
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && silentPlaylistEnabled) {
-                // 백그라운드에서 돌아왔을 때 Wake Lock 재활성화
-                if (wakeLock === null) {
-                    requestWakeLock();
-                }
-            }
-        });
 
         function handleSilentPlaylistProgress() {
             console.log('[Silent Playlist] 영상 종료 이벤트 발생');
@@ -3898,7 +3864,10 @@
                     // iOS 인라인 재생을 위한 모든 속성 설정
                     video.setAttribute('playsinline', '');
                     video.setAttribute('webkit-playsinline', '');
+                    video.setAttribute('x5-playsinline', '');
+                    video.setAttribute('x5-video-player-type', 'h5');
                     video.setAttribute('x-webkit-airplay', 'allow');
+                    video.setAttribute('preload', 'metadata');
                     video.controls = true;
                     video.autoplay = true;
                     video.muted = false;
