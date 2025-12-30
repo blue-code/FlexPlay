@@ -1713,9 +1713,9 @@
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
 
-        // 화면 자동 꺼짐 방지 (requestAnimationFrame 사용)
-        let wakeLockInterval = null;
-        let wakeLockEnabled = false;
+        // 화면 자동 꺼짐 방지 (Wake Lock API - HTTPS 필수)
+        let wakeLock = null;
+        let wakeLockSupported = 'wakeLock' in navigator;
         let historyLoaded = false;
         let historyLoading = null;
         let playbackHistory = new Map();
@@ -2430,15 +2430,14 @@
             // 일반 또는 트랜스코딩 재생
             else {
                 let endpoint;
-                if (silentPlaylistEnabled) {
-                    // 무소음 모드: 오디오 트랙이 없는 스트림 사용 (백그라운드 음악 보호)
-                    endpoint = `/api/video-silent/${encodeURIComponent(filename)}`;
-                } else if (transcodeEnabled) {
+                // 무소음 모드에서도 일반 비디오 사용 (iOS 화면 꺼짐 방지를 위해 오디오 트랙 필요)
+                if (transcodeEnabled) {
                     endpoint = `/api/transcode/${encodeURIComponent(filename)}`;
                 } else {
                     endpoint = `/api/video/${encodeURIComponent(filename)}`;
                 }
 
+                console.log('[Video] 로드 URL:', endpoint, '| 무소음 모드:', silentPlaylistEnabled);
                 videoSource.src = endpoint;
                 videoPlayer.load();
                 applySilentAudioState();
@@ -2646,7 +2645,7 @@
 
             prepareResumeForVideo(filename);
 
-            // iOS Safari에서 백그라운드 음악 보호를 위한 설정
+            // iOS Safari 설정
             videoPlayer.muted = true;
             videoPlayer.volume = 0;
             videoPlayer.setAttribute('muted', '');
@@ -2684,24 +2683,26 @@
                     videoPlayer.load();
 
                     videoPlayer.addEventListener('loadedmetadata', function onLoad() {
-                        // 항상 음소거 상태 유지 (백그라운드 음악 보호)
-                        videoPlayer.muted = true;
-                        videoPlayer.volume = 0;
-
-                        // 오디오 트랙 완전 비활성화 (백그라운드 음악 보호)
-                        if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
-                            for (let i = 0; i < videoPlayer.audioTracks.length; i++) {
-                                videoPlayer.audioTracks[i].enabled = false;
-                            }
-                        }
-
+                        // 무소음 모드 오디오 상태 적용
                         applySilentAudioState();
                         const startTime = resolveStartTime(seekTime);
                         if (startTime > 0 && !isNaN(videoPlayer.duration)) {
                             videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                         }
                         videoPlayer.playbackRate = currentPlaybackSpeed;
-                        if (autoPlay) videoPlayer.play();
+
+                        if (autoPlay) {
+                            console.log('[Video HLS] 자동 재생 시도:', filename);
+                            videoPlayer.play().then(() => {
+                                console.log('[Video HLS] 자동 재생 성공:', filename);
+                            }).catch(err => {
+                                console.error('[Video HLS] 자동 재생 실패:', filename, err);
+                                setTimeout(() => {
+                                    videoPlayer.play().catch(e => console.error('[Video HLS] 재시도 실패:', e));
+                                }, 500);
+                            });
+                        }
+
                         videoPlayer.removeEventListener('loadedmetadata', onLoad);
                     });
                 }
@@ -2718,23 +2719,25 @@
                     hls.attachMedia(videoPlayer);
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                        // 항상 음소거 상태 유지 (백그라운드 음악 보호)
-                        videoPlayer.muted = true;
-                        videoPlayer.volume = 0;
-
-                        // 오디오 트랙 완전 비활성화 (백그라운드 음악 보호)
-                        if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
-                            for (let i = 0; i < videoPlayer.audioTracks.length; i++) {
-                                videoPlayer.audioTracks[i].enabled = false;
-                            }
-                        }
-
+                        // 무소음 모드 오디오 상태 적용
                         applySilentAudioState();
                         const startTime = resolveStartTime(seekTime);
                         if (startTime > 0 && !isNaN(videoPlayer.duration)) {
                             videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                         }
-                        if (autoPlay) videoPlayer.play();
+
+                        if (autoPlay) {
+                            console.log('[Video HLS.js] 자동 재생 시도:', filename);
+                            videoPlayer.play().then(() => {
+                                console.log('[Video HLS.js] 자동 재생 성공:', filename);
+                            }).catch(err => {
+                                console.error('[Video HLS.js] 자동 재생 실패:', filename, err);
+                                setTimeout(() => {
+                                    videoPlayer.play().catch(e => console.error('[Video HLS.js] 재시도 실패:', e));
+                                }, 500);
+                            });
+                        }
+
                         videoPlayer.playbackRate = currentPlaybackSpeed;
                     });
 
@@ -2746,15 +2749,14 @@
             // 일반 또는 트랜스코딩 재생
             else {
                 let endpoint;
-                if (silentPlaylistEnabled) {
-                    // 무소음 모드: 오디오 트랙이 없는 스트림 사용 (백그라운드 음악 보호)
-                    endpoint = `/api/video-silent/${encodeURIComponent(filename)}`;
-                } else if (transcodeEnabled) {
+                // 무소음 모드에서도 일반 비디오 사용 (iOS 화면 꺼짐 방지를 위해 오디오 트랙 필요)
+                if (transcodeEnabled) {
                     endpoint = `/api/transcode/${encodeURIComponent(filename)}`;
                 } else {
                     endpoint = `/api/video/${encodeURIComponent(filename)}`;
                 }
 
+                console.log('[Video] 로드 URL:', endpoint, '| 무소음 모드:', silentPlaylistEnabled);
                 videoSource.src = endpoint;
                 videoPlayer.load();
 
@@ -2763,12 +2765,8 @@
                     videoPlayer.muted = true;
                     videoPlayer.volume = 0;
 
-                    // 오디오 트랙 완전 비활성화 (백그라운드 음악 보호)
-                    if (videoPlayer.audioTracks && videoPlayer.audioTracks.length > 0) {
-                        for (let i = 0; i < videoPlayer.audioTracks.length; i++) {
-                            videoPlayer.audioTracks[i].enabled = false;
-                        }
-                    }
+                    // 주의: audioTracks를 비활성화하면 iOS가 활성 미디어로 인식하지 않아 화면이 꺼짐
+                    // muted와 volume=0만으로도 백그라운드 음악은 보호됨
 
                     applySilentAudioState();
                     const startTime = resolveStartTime(seekTime);
@@ -2776,7 +2774,20 @@
                         videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                     }
                     videoPlayer.playbackRate = currentPlaybackSpeed;
-                    if (autoPlay) videoPlayer.play();
+
+                    if (autoPlay) {
+                        console.log('[Video] 자동 재생 시도:', filename);
+                        videoPlayer.play().then(() => {
+                            console.log('[Video] 자동 재생 성공:', filename);
+                        }).catch(err => {
+                            console.error('[Video] 자동 재생 실패:', filename, err);
+                            // iOS에서 실패하면 재시도
+                            setTimeout(() => {
+                                videoPlayer.play().catch(e => console.error('[Video] 재시도 실패:', e));
+                            }, 500);
+                        });
+                    }
+
                     videoPlayer.removeEventListener('loadedmetadata', onLoad);
                 });
             }
@@ -2865,17 +2876,85 @@
             document.addEventListener('keydown', handler, { capture: true });
         }
 
+        // 마지막으로 다음 영상 전환을 시도한 시간 (중복 방지)
+        let lastProgressCheckTime = 0;
+
         function setupSilentPlaylistSupport() {
             videoPlayer.setAttribute('playsinline', '');
             videoPlayer.setAttribute('webkit-playsinline', '');
             videoPlayer.addEventListener('ended', handleSilentPlaylistProgress);
-            videoPlayer.addEventListener('loadedmetadata', applySilentAudioState);
+            videoPlayer.addEventListener('loadedmetadata', (e) => {
+                applySilentAudioState();
+                console.log('[Silent Playlist] loadedmetadata - duration:', videoPlayer.duration, '초');
+            });
             videoPlayer.addEventListener('play', applySilentAudioState);
+
+            // pause 이벤트도 체크 (iOS에서 비디오 종료 시 pause됨)
+            videoPlayer.addEventListener('pause', () => {
+                if (!silentPlaylistEnabled) return;
+                if (!videoPlayer.duration || isNaN(videoPlayer.duration)) return;
+                if (videoPlayer.seeking) return; // seeking 중이면 무시
+
+                const currentTime = videoPlayer.currentTime;
+                const duration = videoPlayer.duration;
+                const remaining = duration - currentTime;
+                const progress = (currentTime / duration) * 100;
+
+                console.log('[Silent Playlist] pause 이벤트 - 진행:', progress.toFixed(1), '%, 남은 시간:', remaining.toFixed(1), '초, ended:', videoPlayer.ended);
+
+                // 영상이 95% 이상 재생된 상태에서 pause되고, ended 상태가 아니면
+                // 잠시 후 자동 재생을 시도 (화면 꺼짐 방지와 충돌 방지)
+                if (progress >= 95 && !videoPlayer.ended) {
+                    // 0.5초 후 다시 재생 시도 (화면 꺼짐 방지와 충돌 방지)
+                    setTimeout(() => {
+                        if (silentPlaylistEnabled && videoPlayer.paused && !videoPlayer.ended) {
+                            const currentProgress = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+                            if (currentProgress >= 95) {
+                                // 여전히 95% 이상이고 pause 상태면 종료로 간주
+                                const now = Date.now();
+                                if (now - lastProgressCheckTime > 3000) {
+                                    lastProgressCheckTime = now;
+                                    console.log('[Silent Playlist] pause로 종료 감지 (재확인 후)');
+                                    handleSilentPlaylistProgress();
+                                }
+                            }
+                        }
+                    }, 500);
+                }
+            });
             videoPlayer.addEventListener('volumechange', () => {
                 if (silentPlaylistEnabled) {
                     applySilentAudioState();
                 }
             });
+
+            // iOS Safari에서 ended 이벤트가 발생하지 않을 수 있으므로 timeupdate로도 체크
+            videoPlayer.addEventListener('timeupdate', () => {
+                if (!silentPlaylistEnabled) return;
+                if (!videoPlayer.duration || isNaN(videoPlayer.duration)) return;
+
+                const currentTime = videoPlayer.currentTime;
+                const duration = videoPlayer.duration;
+                const remaining = duration - currentTime;
+                const progress = (currentTime / duration) * 100;
+
+                // 디버깅: 5초마다 진행 상황 로그
+                if (Math.floor(currentTime) % 5 === 0 && currentTime > 0) {
+                    console.log('[Silent Playlist] 재생 중:', currentTime.toFixed(1), '/', duration.toFixed(1), '초 (', progress.toFixed(1), '%)');
+                }
+
+                // 영상이 98% 이상 재생되었거나 2초 이하 남았을 때 다음 영상 전환
+                if ((progress >= 98 || remaining <= 2) && remaining > 0) {
+                    const now = Date.now();
+                    // 3초 간격으로만 체크 (중복 방지)
+                    if (now - lastProgressCheckTime > 3000) {
+                        lastProgressCheckTime = now;
+                        console.log('[Silent Playlist] timeupdate로 종료 감지 (진행:', progress.toFixed(1), '%, 남은 시간:', remaining.toFixed(1), '초)');
+                        handleSilentPlaylistProgress();
+                    }
+                }
+            });
+
             updateSilentPlaylistButton();
         }
 
@@ -2896,6 +2975,7 @@
 
         function applySilentAudioState() {
             if (!silentPlaylistEnabled) return;
+            // 완전 음소거 (백그라운드 음악 보호)
             videoPlayer.muted = true;
             videoPlayer.volume = 0;
             videoPlayer.setAttribute('muted', '');
@@ -2925,12 +3005,16 @@
         }
 
         async function startSilentPlaylist() {
+            console.log('[Silent Playlist] 시작 요청');
+
             if (!videos || videos.length === 0) {
                 alert('재생할 영상이 없습니다. 폴더를 선택하거나 영상을 추가해주세요.');
                 return;
             }
 
             silentPlaylist = videos.map(v => v.name);
+            console.log('[Silent Playlist] 재생 목록 생성:', silentPlaylist.length, '개');
+
             if (silentPlaylist.length === 0) {
                 alert('재생할 영상이 없습니다. 필터를 확인해주세요.');
                 return;
@@ -2947,14 +3031,22 @@
             const existingIndex = currentVideo ? silentPlaylist.indexOf(currentVideo) : -1;
             silentPlaylistIndex = existingIndex >= 0 ? existingIndex : 0;
 
+            console.log('[Silent Playlist] 시작 인덱스:', silentPlaylistIndex, '영상:', silentPlaylist[silentPlaylistIndex]);
+
+            // 전환 시간 초기화
+            lastProgressCheckTime = 0;
+
             // 첫 영상 자동 재생 (autoPlay=true)
             await playVideoInternal(silentPlaylist[silentPlaylistIndex], 0, true);
         }
 
         function stopSilentPlaylist() {
+            console.log('[Silent Playlist] 전체재생 종료');
             silentPlaylistEnabled = false;
             silentPlaylist = [];
             silentPlaylistIndex = -1;
+            lastProgressCheckTime = 0;
+
             // 무소음 모드 종료 후에도 음소거 상태 유지
             videoPlayer.muted = true;
             videoPlayer.volume = 0;
@@ -2963,60 +3055,83 @@
             releaseWakeLock();
         }
 
-        // 화면 자동 꺼짐 방지 활성화 (requestAnimationFrame 사용)
-        function requestWakeLock() {
-            if (wakeLockEnabled) {
+        // 화면 자동 꺼짐 방지 활성화 (Wake Lock API - HTTPS 필수)
+        async function requestWakeLock() {
+            if (!wakeLockSupported) {
+                console.log('Wake Lock API가 지원되지 않습니다.');
                 return;
             }
 
-            wakeLockEnabled = true;
-
-            // requestAnimationFrame 루프로 화면 활성 상태 유지
-            function keepAwake() {
-                if (!wakeLockEnabled) return;
-
-                // 화면 활성 상태 유지를 위한 더미 작업
-                const dummy = document.createElement('div');
-                dummy.style.position = 'fixed';
-                dummy.style.opacity = '0.001';
-                dummy.style.pointerEvents = 'none';
-                document.body.appendChild(dummy);
-                setTimeout(() => dummy.remove(), 0);
-
-                requestAnimationFrame(keepAwake);
+            if (wakeLock !== null) {
+                console.log('Wake Lock이 이미 활성화되어 있습니다.');
+                return;
             }
 
-            keepAwake();
-            console.log('화면 자동 꺼짐 방지 활성화 (requestAnimationFrame)');
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log('화면 자동 꺼짐 방지 활성화 (Wake Lock API)');
+
+                // Wake Lock 해제 이벤트 리스너
+                wakeLock.addEventListener('release', () => {
+                    console.log('Wake Lock이 해제되었습니다.');
+                    wakeLock = null;
+                });
+            } catch (err) {
+                console.error('Wake Lock 요청 실패:', err);
+                wakeLock = null;
+            }
         }
 
         // 화면 꺼짐 방지 해제
-        function releaseWakeLock() {
-            if (!wakeLockEnabled) {
-                return;
+        async function releaseWakeLock() {
+            if (wakeLock !== null) {
+                try {
+                    await wakeLock.release();
+                    wakeLock = null;
+                    console.log('화면 자동 꺼짐 방지 해제');
+                } catch (err) {
+                    console.error('Wake Lock 해제 실패:', err);
+                }
             }
-
-            wakeLockEnabled = false;
-            console.log('화면 자동 꺼짐 방지 해제');
         }
 
-        // 페이지 visibility 변경 시 재활성화
+        // 페이지 visibility 변경 시 재활성화 (Wake Lock API는 자동으로 복원됨)
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && silentPlaylistEnabled && !wakeLockEnabled) {
-                requestWakeLock();
+            if (document.visibilityState === 'visible' && silentPlaylistEnabled) {
+                // 백그라운드에서 돌아왔을 때 Wake Lock 재활성화
+                if (wakeLock === null) {
+                    requestWakeLock();
+                }
             }
         });
 
         function handleSilentPlaylistProgress() {
-            if (!silentPlaylistEnabled) return;
+            console.log('[Silent Playlist] 영상 종료 이벤트 발생');
+            console.log('[Silent Playlist] 활성화 상태:', silentPlaylistEnabled);
+            console.log('[Silent Playlist] 현재 인덱스:', silentPlaylistIndex, '/', silentPlaylist.length);
+
+            if (!silentPlaylistEnabled) {
+                console.log('[Silent Playlist] 비활성화 상태로 종료');
+                return;
+            }
+
             if (silentPlaylistIndex + 1 >= silentPlaylist.length) {
+                console.log('[Silent Playlist] 마지막 영상 도달, 전체재생 종료');
                 stopSilentPlaylist();
                 return;
             }
 
             silentPlaylistIndex += 1;
+            const nextVideo = silentPlaylist[silentPlaylistIndex];
+            console.log('[Silent Playlist] 다음 영상 재생:', nextVideo);
+
+            // 다음 영상 전환 시간 리셋
+            lastProgressCheckTime = Date.now();
+
             // 다음 영상 자동 재생 (autoPlay=true)
-            playVideoInternal(silentPlaylist[silentPlaylistIndex], 0, true);
+            playVideoInternal(nextVideo, 0, true).catch(err => {
+                console.error('[Silent Playlist] 다음 영상 재생 실패:', err);
+            });
         }
 
         // 재생 기록 저장

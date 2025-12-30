@@ -1050,39 +1050,12 @@ def serve_video_silent(filename):
         except subprocess.TimeoutExpired:
             return jsonify({'error': 'Audio removal timeout'}), 500
 
-    # Range request 지원 (iOS Safari 필수)
-    range_header = request.headers.get('Range', None)
-
-    if not range_header:
-        return send_file(cache_path, mimetype=get_mime_type(filename))
-
-    size = os.path.getsize(cache_path)
-    byte_start, byte_end = 0, size - 1
-
-    if range_header:
-        byte_range = range_header.replace('bytes=', '').split('-')
-        byte_start = int(byte_range[0])
-        if byte_range[1]:
-            byte_end = int(byte_range[1])
-
-    length = byte_end - byte_start + 1
-
-    with open(cache_path, 'rb') as f:
-        f.seek(byte_start)
-        data = f.read(length)
-
-    response = Response(
-        data,
-        206,
+    # Flask의 send_file이 자동으로 Range request 처리 (iOS Safari 호환)
+    return send_file(
+        cache_path,
         mimetype=get_mime_type(filename),
-        direct_passthrough=True
+        conditional=True  # Range request 자동 처리
     )
-
-    response.headers.add('Content-Range', f'bytes {byte_start}-{byte_end}/{size}')
-    response.headers.add('Accept-Ranges', 'bytes')
-    response.headers.add('Content-Length', str(length))
-
-    return response
 
 
 @app.route('/api/hls/<path:filename>/playlist.m3u8')
@@ -2069,6 +2042,21 @@ scheduler.start()
 if __name__ == '__main__':
     try:
         print(f"🗑️  캐시 자동 정리: {cleanup_interval_hours}시간마다 실행 (최대 {settings['max_age_days']}일, {settings['max_size_gb']}GB)")
-        app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
+
+        # SSL 자체 서명 인증서 사용 (HTTPS - iOS Wake Lock API 지원)
+        import os
+        cert_path = os.path.join(os.path.dirname(__file__), 'cert.pem')
+        key_path = os.path.join(os.path.dirname(__file__), 'key.pem')
+
+        if os.path.exists(cert_path) and os.path.exists(key_path):
+            print("🔒 HTTPS 활성화 (자체 서명 인증서)")
+            print(f"📱 iPad Safari에서 https://[서버IP]:7777 접속")
+            print(f"⚠️  브라우저 경고 화면에서 '계속 진행' 클릭")
+            app.run(debug=True, host='0.0.0.0', port=7777, threaded=True,
+                    ssl_context=(cert_path, key_path))
+        else:
+            print("⚠️  SSL 인증서가 없습니다. HTTP로 실행 (Wake Lock API 사용 불가)")
+            print("💡 인증서 생성: openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365")
+            app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()

@@ -23,6 +23,10 @@ static/hls/
 static/silent_videos/
 config.json
 
+# SSL 인증서 (자체 서명)
+cert.pem
+key.pem
+
 # IDE
 .vscode/
 .idea/
