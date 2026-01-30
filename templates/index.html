@@ -562,6 +562,21 @@
             margin-bottom: 20px;
         }
 
+        .video-wrapper:fullscreen,
+        .video-wrapper:-webkit-full-screen {
+            width: 100vw;
+            height: 100vh;
+            border-radius: 0;
+        }
+
+        .video-wrapper:fullscreen video,
+        .video-wrapper:-webkit-full-screen video {
+            width: 100%;
+            height: 100%;
+            max-height: none;
+            object-fit: contain;
+        }
+
         video {
             width: 100%;
             display: block;
@@ -1521,7 +1536,7 @@
 
             <!-- Video Player -->
             <div class="player-container">
-                <div class="video-wrapper">
+                <div class="video-wrapper" id="videoWrapper">
                     <video id="videoPlayer" controls
                            playsinline
                            webkit-playsinline
@@ -1699,6 +1714,7 @@
 
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
+        const videoWrapper = document.getElementById('videoWrapper');
         const videoSource = document.getElementById('videoSource');
         let currentVideo = null;
         let videos = [];
@@ -2534,12 +2550,21 @@
             videoPlayer.currentTime = Math.min(videoPlayer.duration, videoPlayer.currentTime + 10);
         }
 
-        // 전체화면 토글
+        // 전체화면 토글 (컨테이너를 전체화면으로 만들어 소스 변경 시에도 유지)
         function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                videoPlayer.requestFullscreen();
+            const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+            if (!fullscreenElement) {
+                if (videoWrapper.requestFullscreen) {
+                    videoWrapper.requestFullscreen();
+                } else if (videoWrapper.webkitRequestFullscreen) {
+                    videoWrapper.webkitRequestFullscreen();
+                }
             } else {
-                document.exitFullscreen();
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
             }
         }
 
