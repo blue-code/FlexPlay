@@ -577,6 +577,58 @@
             object-fit: contain;
         }
 
+        body.inline-silent-fullscreen-active {
+            overflow: hidden;
+        }
+
+        .video-wrapper.inline-silent-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100dvh;
+            z-index: 5000;
+            border-radius: 0;
+            margin-bottom: 0;
+        }
+
+        .video-wrapper.inline-silent-fullscreen video {
+            width: 100%;
+            height: 100%;
+            max-height: none;
+            object-fit: contain;
+        }
+
+        .silent-fullscreen-close {
+            display: none;
+            position: absolute;
+            top: max(14px, env(safe-area-inset-top));
+            right: max(14px, env(safe-area-inset-right));
+            z-index: 5001;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.68);
+            color: #fff;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .silent-fullscreen-close:hover {
+            background: rgba(0, 0, 0, 0.86);
+        }
+
+        .video-wrapper:fullscreen .silent-fullscreen-close,
+        .video-wrapper:-webkit-full-screen .silent-fullscreen-close,
+        .video-wrapper.inline-silent-fullscreen .silent-fullscreen-close {
+            display: flex;
+        }
+
         video {
             width: 100%;
             display: block;
@@ -1537,6 +1589,11 @@
             <!-- Video Player -->
             <div class="player-container">
                 <div class="video-wrapper" id="videoWrapper">
+                    <button class="silent-fullscreen-close"
+                            type="button"
+                            onclick="closeSilentFullscreen(event)"
+                            aria-label="전체화면 닫기"
+                            title="전체화면 닫기">✕</button>
                     <video id="videoPlayer" controls
                            playsinline
                            webkit-playsinline
@@ -1732,6 +1789,12 @@
         let silentPlaylistEnabled = false;
         let silentPlaylist = [];
         let silentPlaylistIndex = -1;
+        let lastKnownFullscreenMode = null; // 'native' | 'element' | null
+        let fullscreenExitDetectedAt = 0;
+        let inlineSilentFullscreenActive = false;
+        let silentFullscreenTransitioning = false;
+        let fullscreenRestoreTimer = null;
+        let viewerSilentFallbackActive = false;
         let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
@@ -1746,6 +1809,7 @@
         const LONG_VIDEO_THRESHOLD = 180; // 3 minutes
         const HISTORY_SAVE_INTERVAL_MS = 15000;
         const HISTORY_MIN_POSITION = 5;
+        const IOS_FULLSCREEN_EXIT_GRACE_MS = 2200;
 
         // 구간 편집 관련 변수
         let editSegments = [];  // 삭제할 구간들 [{start: 0, end: 10}, ...]
@@ -1775,6 +1839,7 @@
             setupKeyboardShortcuts();
             setupVideoErrorHandler();
             setupSilentPlaylistSupport();
+            setupFullscreenStateTracking();
             setupPlaybackStateHandlers();
             updateSpeedButtonState();
             resetEditState();
@@ -2380,6 +2445,7 @@
 
             await ensureHistoryReady();
             currentVideo = filename;
+            const fullscreenModeBeforeLoad = detectFullscreenMode();
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
                 const queueIndex = silentPlaylist.indexOf(filename);
@@ -2411,6 +2477,7 @@
                             videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                         }
                         videoPlayer.playbackRate = currentPlaybackSpeed;
+                        scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                         videoPlayer.play();
                         videoPlayer.removeEventListener('loadedmetadata', onLoad);
                     });
@@ -2433,6 +2500,7 @@
                             videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                         }
                         applySilentAudioState();
+                        scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                         videoPlayer.play();
                         videoPlayer.playbackRate = currentPlaybackSpeed;
                     });
@@ -2469,6 +2537,7 @@
                         videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                     }
                     videoPlayer.playbackRate = currentPlaybackSpeed;
+                    scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                     videoPlayer.play();
                     videoPlayer.removeEventListener('loadedmetadata', onLoad);
                 });
@@ -2550,21 +2619,326 @@
             videoPlayer.currentTime = Math.min(videoPlayer.duration, videoPlayer.currentTime + 10);
         }
 
+        function detectFullscreenMode() {
+            if (videoPlayer.webkitDisplayingFullscreen) return 'native';
+            if (document.fullscreenElement || document.webkitFullscreenElement) return 'element';
+            return null;
+        }
+
+        function clearFullscreenRestoreTimer() {
+            if (!fullscreenRestoreTimer) return;
+            clearTimeout(fullscreenRestoreTimer);
+            fullscreenRestoreTimer = null;
+        }
+
+        function isIOSDevice() {
+            const ua = navigator.userAgent || '';
+            const isIOS = /iPad|iPhone|iPod/.test(ua);
+            const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+            return isIOS || isIPadOS;
+        }
+
+        function requestElementFullscreen() {
+            if (videoWrapper.requestFullscreen) {
+                const promise = videoWrapper.requestFullscreen();
+                if (promise && typeof promise.catch === 'function') {
+                    promise.catch((err) => console.log('[Fullscreen] element 요청 실패:', err));
+                }
+                return;
+            }
+            if (videoWrapper.webkitRequestFullscreen) {
+                videoWrapper.webkitRequestFullscreen();
+            }
+        }
+
+        function requestFullscreenByMode(mode) {
+            if (!mode) return;
+            if (mode === 'native') {
+                if (videoPlayer.webkitEnterFullscreen) {
+                    try {
+                        videoPlayer.webkitEnterFullscreen();
+                        return;
+                    } catch (err) {
+                        console.log('[Fullscreen] native 요청 실패:', err);
+                    }
+                }
+                requestElementFullscreen();
+                return;
+            }
+            requestElementFullscreen();
+        }
+
+        function exitMainPlayerFullscreen() {
+            clearFullscreenRestoreTimer();
+            deactivateInlineSilentFullscreen();
+
+            const mode = detectFullscreenMode();
+            if (mode === 'native' && videoPlayer.webkitExitFullscreen) {
+                try {
+                    videoPlayer.webkitExitFullscreen();
+                } catch (err) {
+                    console.log('[Fullscreen] native 종료 실패:', err);
+                }
+                return;
+            }
+
+            if (document.exitFullscreen && document.fullscreenElement) {
+                const promise = document.exitFullscreen();
+                if (promise && typeof promise.catch === 'function') {
+                    promise.catch((err) => console.log('[Fullscreen] element 종료 실패:', err));
+                }
+                return;
+            }
+
+            if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+                document.webkitExitFullscreen();
+            }
+        }
+
+        function closeSilentFullscreen(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            if (silentPlaylistEnabled) {
+                stopSilentPlaylist();
+                return;
+            }
+
+            exitMainPlayerFullscreen();
+            lastKnownFullscreenMode = null;
+            fullscreenExitDetectedAt = 0;
+        }
+
+        function activateInlineSilentFullscreen() {
+            if (inlineSilentFullscreenActive) return;
+            inlineSilentFullscreenActive = true;
+            videoWrapper.classList.add('inline-silent-fullscreen');
+            document.body.classList.add('inline-silent-fullscreen-active');
+        }
+
+        function deactivateInlineSilentFullscreen() {
+            if (!inlineSilentFullscreenActive) return;
+            inlineSilentFullscreenActive = false;
+            videoWrapper.classList.remove('inline-silent-fullscreen');
+            document.body.classList.remove('inline-silent-fullscreen-active');
+        }
+
+        async function requestFullscreenForSilentPlaylistStart() {
+            const currentMode = detectFullscreenMode();
+            if (currentMode) {
+                lastKnownFullscreenMode = currentMode;
+                fullscreenExitDetectedAt = 0;
+                return currentMode;
+            }
+
+            let requestedMode = null;
+            let attemptedFullscreenRequest = false;
+
+            if (videoWrapper.requestFullscreen || videoWrapper.webkitRequestFullscreen) {
+                requestElementFullscreen();
+                requestedMode = 'element';
+                attemptedFullscreenRequest = true;
+            }
+
+            const elementMode = detectFullscreenMode();
+            if (elementMode) {
+                lastKnownFullscreenMode = elementMode;
+                fullscreenExitDetectedAt = 0;
+                return elementMode;
+            }
+
+            if (isIOSDevice() && videoPlayer.webkitEnterFullscreen) {
+                try {
+                    videoPlayer.webkitEnterFullscreen();
+                    attemptedFullscreenRequest = true;
+                    if (videoPlayer.webkitDisplayingFullscreen) {
+                        lastKnownFullscreenMode = 'native';
+                        fullscreenExitDetectedAt = 0;
+                        return 'native';
+                    }
+                    const nativeMode = detectFullscreenMode();
+                    if (nativeMode) {
+                        lastKnownFullscreenMode = nativeMode;
+                        fullscreenExitDetectedAt = 0;
+                        return nativeMode;
+                    }
+                } catch (err) {
+                    console.log('[Silent Playlist] 시작 시 native 전체화면 요청 실패:', err);
+                }
+            }
+
+            if (attemptedFullscreenRequest) {
+                await new Promise(resolve => setTimeout(resolve, 120));
+                const settledMode = detectFullscreenMode();
+                if (settledMode) {
+                    lastKnownFullscreenMode = settledMode;
+                    fullscreenExitDetectedAt = 0;
+                    return settledMode;
+                }
+            }
+
+            // iOS에서 시스템 fullscreen 요청이 실제로 성립하지 않으면 inline fallback 사용
+            if (isIOSDevice()) {
+                return null;
+            }
+
+            return requestedMode;
+        }
+
+        function scheduleFullscreenRestore(mode) {
+            if (!mode) return;
+
+            clearFullscreenRestoreTimer();
+            const startedAt = Date.now();
+            const maxDurationMs = 1800;
+            const intervalMs = 160;
+            let attemptCount = 0;
+
+            const attempt = () => {
+                attemptCount += 1;
+                const currentMode = detectFullscreenMode();
+                if (currentMode !== mode) {
+                    requestFullscreenByMode(mode);
+                }
+
+                const modeAfterRequest = detectFullscreenMode();
+                const shouldFastFallbackToInline = (
+                    (mode === 'native' || mode === 'element') &&
+                    isIOSDevice() &&
+                    silentPlaylistEnabled &&
+                    !viewerSilentFallbackActive &&
+                    !viewerActive &&
+                    modeAfterRequest !== mode &&
+                    attemptCount >= 2
+                );
+
+                if (shouldFastFallbackToInline) {
+                    console.warn('[Silent Playlist] iOS 전체화면 복원 불가, 메인 플레이어 가상 fullscreen으로 전환');
+                    activateInlineSilentFullscreen();
+                    lastKnownFullscreenMode = null;
+                    fullscreenExitDetectedAt = 0;
+                    clearFullscreenRestoreTimer();
+                    return;
+                }
+
+                if (Date.now() - startedAt < maxDurationMs) {
+                    fullscreenRestoreTimer = setTimeout(attempt, intervalMs);
+                } else {
+                    if (detectFullscreenMode() !== mode && silentPlaylistEnabled && !viewerSilentFallbackActive && isIOSDevice()) {
+                        console.warn('[Silent Playlist] 전체화면 복원 실패, 메인 플레이어 가상 fullscreen으로 전환');
+                        activateInlineSilentFullscreen();
+                        lastKnownFullscreenMode = null;
+                        fullscreenExitDetectedAt = 0;
+                    }
+                    clearFullscreenRestoreTimer();
+                }
+            };
+
+            fullscreenRestoreTimer = setTimeout(attempt, 60);
+        }
+
+        async function startSilentPlaylistInViewer(startIndex = 0) {
+            if (!videos || videos.length === 0) return;
+
+            viewerSilentFallbackActive = true;
+            viewerItems = videos.map(v => ({
+                ...v,
+                type: 'video'
+            }));
+
+            const clamped = Math.max(0, Math.min(startIndex, viewerItems.length - 1));
+            viewerCurrentIndex = clamped;
+            silentPlaylistIndex = clamped;
+            browsePath = '';
+            browseFolder = '';
+
+            await openFullscreenViewer();
+        }
+
+        function activateSilentPlaylistViewerFallback() {
+            if (!silentPlaylistEnabled) return;
+            if (viewerSilentFallbackActive) return;
+
+            const currentIndex = videos.findIndex(v => v.name === currentVideo);
+            const startIndex = currentIndex >= 0
+                ? currentIndex
+                : (silentPlaylistIndex >= 0 ? silentPlaylistIndex : 0);
+
+            startSilentPlaylistInViewer(startIndex).catch((err) => {
+                viewerSilentFallbackActive = false;
+                console.error('[Silent Playlist] 내부 fullscreen-viewer 전환 실패:', err);
+            });
+        }
+
+        function beginSilentFullscreenTransition(mode) {
+            silentFullscreenTransitioning = true;
+            if (mode) {
+                lastKnownFullscreenMode = mode;
+            }
+        }
+
+        function endSilentFullscreenTransition() {
+            silentFullscreenTransitioning = false;
+        }
+
+        function setupFullscreenStateTracking() {
+            const syncFullscreenMode = () => {
+                const mode = detectFullscreenMode();
+                if (mode) {
+                    lastKnownFullscreenMode = mode;
+                    fullscreenExitDetectedAt = 0;
+                    deactivateInlineSilentFullscreen();
+                    return;
+                }
+                if (!silentFullscreenTransitioning) {
+                    if (silentPlaylistEnabled && isIOSDevice() && lastKnownFullscreenMode) {
+                        fullscreenExitDetectedAt = Date.now();
+                        return;
+                    }
+                    lastKnownFullscreenMode = null;
+                    fullscreenExitDetectedAt = 0;
+                }
+            };
+
+            document.addEventListener('fullscreenchange', syncFullscreenMode);
+            document.addEventListener('webkitfullscreenchange', syncFullscreenMode);
+
+            videoPlayer.addEventListener('webkitbeginfullscreen', () => {
+                lastKnownFullscreenMode = 'native';
+            });
+
+            videoPlayer.addEventListener('webkitendfullscreen', () => {
+                if (!silentFullscreenTransitioning) {
+                    syncFullscreenMode();
+                }
+            });
+        }
+
         // 전체화면 토글 (컨테이너를 전체화면으로 만들어 소스 변경 시에도 유지)
         function toggleFullscreen() {
-            const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
-            if (!fullscreenElement) {
-                if (videoWrapper.requestFullscreen) {
-                    videoWrapper.requestFullscreen();
-                } else if (videoWrapper.webkitRequestFullscreen) {
-                    videoWrapper.webkitRequestFullscreen();
+            if (inlineSilentFullscreenActive) {
+                closeSilentFullscreen();
+                return;
+            }
+
+            const mode = detectFullscreenMode();
+            if (!mode) {
+                deactivateInlineSilentFullscreen();
+                requestElementFullscreen();
+                if (silentPlaylistEnabled) {
+                    lastKnownFullscreenMode = 'element';
+                    fullscreenExitDetectedAt = 0;
                 }
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                }
+                return;
+            }
+
+            exitMainPlayerFullscreen();
+
+            if (silentPlaylistEnabled && !silentFullscreenTransitioning) {
+                lastKnownFullscreenMode = null;
+                fullscreenExitDetectedAt = 0;
             }
         }
 
@@ -2654,7 +3028,7 @@
         }
 
         // 내부 재생 함수 (시간 복원 포함)
-        async function playVideoInternal(filename, seekTime = 0, autoPlay = false) {
+        async function playVideoInternal(filename, seekTime = 0, autoPlay = false, fullscreenModeHint = null) {
             if (historySaveHandle) {
                 clearTimeout(historySaveHandle);
                 historySaveHandle = null;
@@ -2666,6 +3040,7 @@
 
             await ensureHistoryReady();
             currentVideo = filename;
+            const fullscreenModeBeforeLoad = fullscreenModeHint || detectFullscreenMode();
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
                 const queueIndex = silentPlaylist.indexOf(filename);
@@ -2721,6 +3096,8 @@
                             videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                         }
                         videoPlayer.playbackRate = currentPlaybackSpeed;
+                        scheduleFullscreenRestore(fullscreenModeBeforeLoad);
+                        endSilentFullscreenTransition();
 
                         if (autoPlay) {
                             console.log('[Video HLS] 자동 재생 시도:', filename);
@@ -2756,6 +3133,8 @@
                         if (startTime > 0 && !isNaN(videoPlayer.duration)) {
                             videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                         }
+                        scheduleFullscreenRestore(fullscreenModeBeforeLoad);
+                        endSilentFullscreenTransition();
 
                         if (autoPlay) {
                             console.log('[Video HLS.js] 자동 재생 시도:', filename);
@@ -2805,6 +3184,8 @@
                         videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
                     }
                     videoPlayer.playbackRate = currentPlaybackSpeed;
+                    scheduleFullscreenRestore(fullscreenModeBeforeLoad);
+                    endSilentFullscreenTransition();
 
                     if (autoPlay) {
                         console.log('[Video] 자동 재생 시도:', filename);
@@ -3051,32 +3432,66 @@
                 return;
             }
 
+            // 버튼 클릭 제스처 시점에서 즉시 전체화면 요청
+            const fullscreenModeFromGesture = await requestFullscreenForSilentPlaylistStart();
+            const detectedMode = fullscreenModeFromGesture || detectFullscreenMode();
+
+            const existingIndex = currentVideo ? silentPlaylist.indexOf(currentVideo) : -1;
+            const startIndex = existingIndex >= 0 ? existingIndex : 0;
+
             rememberAudioState();
             silentPlaylistEnabled = true;
+            viewerSilentFallbackActive = false;
+            lastKnownFullscreenMode = detectedMode || null;
+            fullscreenExitDetectedAt = 0;
+            endSilentFullscreenTransition();
             updateSilentPlaylistButton();
             applySilentAudioState();
 
             // 화면 자동 꺼짐 방지 활성화
             requestWakeLock();
 
-            const existingIndex = currentVideo ? silentPlaylist.indexOf(currentVideo) : -1;
-            silentPlaylistIndex = existingIndex >= 0 ? existingIndex : 0;
+            silentPlaylistIndex = startIndex;
 
             console.log('[Silent Playlist] 시작 인덱스:', silentPlaylistIndex, '영상:', silentPlaylist[silentPlaylistIndex]);
 
             // 전환 시간 초기화
             lastProgressCheckTime = 0;
 
+            if (isIOSDevice() && !detectedMode) {
+                console.warn('[Silent Playlist] 시작 시 iOS 시스템 전체화면 미성공, 메인 플레이어 가상 fullscreen 적용');
+                activateInlineSilentFullscreen();
+            } else {
+                deactivateInlineSilentFullscreen();
+            }
+
             // 첫 영상 자동 재생 (autoPlay=true)
-            await playVideoInternal(silentPlaylist[silentPlaylistIndex], 0, true);
+            await playVideoInternal(
+                silentPlaylist[silentPlaylistIndex],
+                0,
+                true,
+                detectedMode
+            );
         }
 
         function stopSilentPlaylist() {
             console.log('[Silent Playlist] 전체재생 종료');
+            const shouldCloseViewer = viewerSilentFallbackActive && viewerActive;
+            viewerSilentFallbackActive = false;
+
+            if (shouldCloseViewer) {
+                closeFullscreenViewer();
+            }
+
             silentPlaylistEnabled = false;
             silentPlaylist = [];
             silentPlaylistIndex = -1;
+            lastKnownFullscreenMode = null;
+            fullscreenExitDetectedAt = 0;
             lastProgressCheckTime = 0;
+            clearFullscreenRestoreTimer();
+            endSilentFullscreenTransition();
+            exitMainPlayerFullscreen();
 
             // 무소음 모드 종료 후에도 음소거 상태 유지
             videoPlayer.muted = true;
@@ -3106,6 +3521,11 @@
                 return;
             }
 
+            if (viewerSilentFallbackActive) {
+                console.log('[Silent Playlist] 내부 fullscreen-viewer 모드에서 진행 중, 메인 플레이어 전환 생략');
+                return;
+            }
+
             if (silentPlaylistIndex + 1 >= silentPlaylist.length) {
                 console.log('[Silent Playlist] 마지막 영상 도달, 전체재생 종료');
                 stopSilentPlaylist();
@@ -3115,12 +3535,38 @@
             silentPlaylistIndex += 1;
             const nextVideo = silentPlaylist[silentPlaylistIndex];
             console.log('[Silent Playlist] 다음 영상 재생:', nextVideo);
+            const currentMode = detectFullscreenMode();
+            const recentlyLostIOSFullscreen = (
+                isIOSDevice() &&
+                !currentMode &&
+                !!lastKnownFullscreenMode &&
+                fullscreenExitDetectedAt > 0 &&
+                (Date.now() - fullscreenExitDetectedAt) <= IOS_FULLSCREEN_EXIT_GRACE_MS
+            );
+
+            if (recentlyLostIOSFullscreen) {
+                console.warn('[Silent Playlist] iOS 전체화면 이탈 감지, 메인 플레이어 가상 fullscreen으로 전환');
+                activateInlineSilentFullscreen();
+                lastKnownFullscreenMode = null;
+                fullscreenExitDetectedAt = 0;
+            }
+
+            const canReuseLastFullscreenMode = (
+                !!currentMode ||
+                (
+                    fullscreenExitDetectedAt > 0 &&
+                    (Date.now() - fullscreenExitDetectedAt) <= IOS_FULLSCREEN_EXIT_GRACE_MS
+                )
+            );
+            const fullscreenModeToKeep = currentMode || (canReuseLastFullscreenMode ? lastKnownFullscreenMode : null);
+            beginSilentFullscreenTransition(fullscreenModeToKeep);
 
             // 다음 영상 전환 시간 리셋
             lastProgressCheckTime = Date.now();
 
             // 다음 영상 자동 재생 (autoPlay=true)
-            playVideoInternal(nextVideo, 0, true).catch(err => {
+            playVideoInternal(nextVideo, 0, true, fullscreenModeToKeep).catch(err => {
+                endSilentFullscreenTransition();
                 console.error('[Silent Playlist] 다음 영상 재생 실패:', err);
             });
         }
@@ -3745,6 +4191,8 @@
                 return;
             }
 
+            deactivateInlineSilentFullscreen();
+
             // 메인 비디오 플레이어 완전 정지
             if (videoPlayer) {
                 videoPlayer.pause();
@@ -3796,6 +4244,9 @@
         }
 
         function closeFullscreenViewer() {
+            const wasSilentFallback = viewerSilentFallbackActive;
+            viewerSilentFallbackActive = false;
+
             viewerActive = false;
             const viewer = document.getElementById('fullscreenViewer');
             viewer.classList.remove('active');
@@ -3835,6 +4286,19 @@
             }
 
             removeViewerKeyboardShortcuts();
+
+            if (wasSilentFallback && silentPlaylistEnabled) {
+                silentPlaylistEnabled = false;
+                silentPlaylist = [];
+                silentPlaylistIndex = -1;
+                lastKnownFullscreenMode = null;
+                fullscreenExitDetectedAt = 0;
+                lastProgressCheckTime = 0;
+                clearFullscreenRestoreTimer();
+                endSilentFullscreenTransition();
+                updateSilentPlaylistButton();
+                releaseWakeLock();
+            }
         }
 
         function displayViewerItem() {
@@ -3898,6 +4362,15 @@
                     video.muted = false;
                     video.id = 'viewerVideo';
 
+                    if (viewerSilentFallbackActive) {
+                        currentVideo = item.name;
+                        silentPlaylistIndex = viewerCurrentIndex;
+                        video.muted = true;
+                        video.volume = 0;
+                        video.setAttribute('muted', '');
+                        video.playbackRate = currentPlaybackSpeed;
+                    }
+
                     const source = document.createElement('source');
                     source.src = videoUrl;
                     source.type = 'video/mp4';
@@ -3921,6 +4394,17 @@
                             video.play();
                         }, 100);
                     }, false);
+
+                    if (viewerSilentFallbackActive) {
+                        video.addEventListener('ended', () => {
+                            if (!viewerSilentFallbackActive) return;
+                            if (viewerCurrentIndex + 1 >= viewerItems.length) {
+                                stopSilentPlaylist();
+                                return;
+                            }
+                            viewerNavigate(1);
+                        });
+                    }
                 }
             }
         }
@@ -3929,6 +4413,9 @@
             const newIndex = viewerCurrentIndex + direction;
             if (newIndex >= 0 && newIndex < viewerItems.length) {
                 viewerCurrentIndex = newIndex;
+                if (viewerSilentFallbackActive) {
+                    silentPlaylistIndex = newIndex;
+                }
                 displayViewerItem();
 
                 // 네비게이션 후 컨트롤 보이고 타이머 리셋
