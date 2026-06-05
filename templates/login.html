@@ -4,148 +4,127 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlexPlay 로그인</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
     <style>
         :root {
-            --bg: radial-gradient(circle at 20% 20%, #1e3c72, transparent 35%), radial-gradient(circle at 80% 0%, #2a5298, transparent 25%), #0f172a;
-            --card: rgba(15, 23, 42, 0.8);
-            --accent: #7c3aed;
-            --accent-2: #06b6d4;
+            --bg-0: #0b0e13;
+            --bg-2: #161c26;
+            --bg-3: #1c2430;
+            --line-2: rgba(255,255,255,0.13);
+            --text: #eef2f7;
+            --text-2: #9aa7b8;
+            --text-3: #62707f;
+            --accent: #f6b73c;
+            --accent-2: #ffd06a;
+            --accent-ink: #1c1402;
+            --accent-soft: rgba(246,183,60,0.14);
+            --accent-line: rgba(246,183,60,0.40);
+            --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+            --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            margin: 0;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--bg);
-            color: #e2e8f0;
-            font-family: "Segoe UI", sans-serif;
-            padding: 20px;
-        }
-        .card {
-            width: min(420px, 100%);
-            background: var(--card);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 16px;
             padding: 28px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-            backdrop-filter: blur(10px);
+            font-family: var(--font);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+            background:
+                radial-gradient(900px 600px at 78% 8%, #221733 0%, transparent 55%),
+                radial-gradient(800px 600px at 10% 100%, #102433 0%, transparent 50%),
+                var(--bg-0);
         }
-        h1 {
-            margin: 0 0 8px;
-            font-size: 1.5rem;
-            letter-spacing: -0.02em;
+        .login-card { width: min(400px, 100%); }
+        .brand {
+            display: flex; align-items: center; justify-content: center;
+            gap: 12px; margin-bottom: 26px;
         }
-        p.sub {
-            margin: 0 0 20px;
-            color: #94a3b8;
+        .brand .mark {
+            width: 52px; height: 52px; border-radius: 15px; flex: 0 0 auto;
+            background: linear-gradient(150deg, var(--accent) 0%, #ff8a3d 100%);
+            display: flex; align-items: center; justify-content: center; color: var(--accent-ink);
+            box-shadow: 0 4px 14px rgba(246,183,60,.35), inset 0 1px 0 rgba(255,255,255,.4);
         }
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: #cbd5e1;
-            font-size: 0.95rem;
+        .brand .wm { font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
+        .brand .wm b { color: var(--accent); }
+        h1 { font-size: 22px; font-weight: 750; text-align: center; margin-bottom: 6px; }
+        p.sub { text-align: center; color: var(--text-2); font-size: 13.5px; margin-bottom: 26px; line-height: 1.5; }
+        .llabel { display: block; font-size: 12.5px; font-weight: 650; color: var(--text-2); margin-bottom: 7px; }
+        .lfield + .lfield { margin-top: 13px; }
+        input[type="text"], input[type="password"] {
+            width: 100%; height: 46px; padding: 0 14px; border-radius: 10px;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--line-2);
+            color: var(--text); font-size: 14px; outline: none; font-family: inherit;
+            transition: .16s var(--ease);
         }
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 12px 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(255, 255, 255, 0.04);
-            color: #e2e8f0;
-            font-size: 1rem;
-            outline: none;
-            transition: border 0.2s, box-shadow 0.2s;
+        input::placeholder { color: var(--text-3); }
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: var(--accent-line);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+            background: rgba(255,255,255,0.06);
         }
-        input[type="text"]:focus,
-        input[type="password"]:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+        .lrow { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 22px; gap: 12px; }
+        .remember { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13.5px; color: var(--text-2); }
+        .remember input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+        button.submit {
+            width: 100%; height: 48px; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 700; color: var(--accent-ink);
+            background: var(--accent); cursor: pointer; font-family: inherit;
+            transition: .16s var(--ease);
         }
-        .row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 14px;
-            gap: 12px;
-        }
-        .remember {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.95rem;
-            color: #cbd5e1;
-        }
-        .actions {
-            margin-top: 22px;
-        }
-        button {
-            width: 100%;
-            border: none;
-            padding: 14px 16px;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 700;
-            color: white;
-            background: linear-gradient(90deg, var(--accent), var(--accent-2));
-            cursor: pointer;
-            box-shadow: 0 10px 30px rgba(124, 58, 237, 0.35);
-            transition: transform 0.1s ease, box-shadow 0.2s ease;
-        }
-        button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 12px 32px rgba(124, 58, 237, 0.45);
-        }
-        button:active {
-            transform: translateY(0);
-        }
+        button.submit:hover { background: var(--accent-2); }
+        button.submit:active { transform: translateY(1px); }
+        .lfoot { text-align: center; font-size: 12px; color: var(--text-3); margin-top: 22px; }
         .error {
-            margin-top: 12px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            background: rgba(220, 38, 38, 0.12);
-            border: 1px solid rgba(248, 113, 113, 0.4);
-            color: #fecdd3;
-            font-weight: 600;
+            margin-top: 14px; padding: 11px 13px; border-radius: 10px;
+            background: rgba(240,96,110,0.14); border: 1px solid rgba(240,96,110,0.4);
+            color: #ffb3ba; font-weight: 600; font-size: 13px; line-height: 1.5;
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>FlexPlay 로그인</h1>
+    <div class="login-card">
+        <div class="brand">
+            <span class="mark">
+                <svg width="28" height="28" viewBox="0 0 24 24"><path d="M7 4.5l13 7.5-13 7.5z" fill="currentColor"/></svg>
+            </span>
+            <span class="wm">Flex<b>Play</b></span>
+        </div>
+
         {% if locked %}
+            <h1>로그인 잠금</h1>
             <p class="sub">로그인 시도 제한을 초과했습니다. 서버 재시작 전까지 로그인할 수 없습니다.</p>
             <div class="error">
                 최대 {{ limit }}회 시도 초과<br>
                 마지막 실패 IP: {{ locked_ip or '알 수 없음' }}
             </div>
         {% else %}
-            <p class="sub">로그인 정보를 입력하세요. 로그인 상태를 저장할 수도 있습니다.</p>
+            <h1>다시 오신 걸 환영해요</h1>
+            <p class="sub">로그인하고 내 영상 보관함을 열어보세요</p>
             <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
-                <div class="field">
-                    <label for="username">아이디</label>
-                    <input type="text" id="username" name="username" autocomplete="username" required>
+                <div class="lfield">
+                    <label class="llabel" for="username">아이디</label>
+                    <input type="text" id="username" name="username" placeholder="아이디를 입력하세요" autocomplete="username" required>
                 </div>
-                <div class="field" style="margin-top: 14px;">
-                    <label for="password">비밀번호</label>
-                    <input type="password" id="password" name="password" autocomplete="current-password" required>
+                <div class="lfield">
+                    <label class="llabel" for="password">비밀번호</label>
+                    <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
                 </div>
-                <div class="row">
+                <div class="lrow">
                     <label class="remember">
                         <input type="checkbox" name="remember">
                         로그인 상태 유지
                     </label>
                 </div>
-                <div class="actions">
-                    <button type="submit">로그인</button>
-                </div>
+                <button class="submit" type="submit">로그인</button>
                 {% if error %}
                 <div class="error">{{ error }}</div>
                 {% endif %}
             </form>
+            <p class="lfoot">5회 이상 실패 시 보안을 위해 잠시 잠깁니다</p>
         {% endif %}
     </div>
 </body>

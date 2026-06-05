@@ -6,6 +6,7 @@
     <title>FlexPlay - Flexible Video Player</title>
     <!-- HLS.js for non-Safari browsers -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.3"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
     <style>
         * {
             margin: 0;
@@ -1518,11 +1519,405 @@
                 min-height: 60px;
             }
         }
+
+        /* ============================================================
+           DARK CINEMATIC THEME — FlexPlay redesign (override layer)
+           Plex/Netflix feel · amber-gold accent · clean surfaces.
+           Appended last so these rules win over the legacy light theme
+           without touching markup classes or JS handlers.
+           ============================================================ */
+        :root {
+            --bg-stage: #050608;
+            --bg-0: #0b0e13;
+            --bg-1: #10151d;
+            --bg-2: #161c26;
+            --bg-3: #1c2430;
+            --bg-4: #243040;
+            --glass: rgba(20, 26, 36, 0.72);
+            --line:   rgba(255,255,255,0.07);
+            --line-2: rgba(255,255,255,0.13);
+            --line-3: rgba(255,255,255,0.22);
+            --text:   #eef2f7;
+            --text-2: #9aa7b8;
+            --text-3: #62707f;
+            --accent:      #f6b73c;
+            --accent-2:    #ffd06a;
+            --accent-ink:  #1c1402;
+            --accent-soft: rgba(246,183,60,0.14);
+            --accent-line: rgba(246,183,60,0.40);
+            --good:        #4cc792;
+            --good-soft:   rgba(76,199,146,0.15);
+            --bad:         #f0606e;
+            --bad-soft:    rgba(240,96,110,0.15);
+            --info:        #5aa9f0;
+            --r-xs: 7px; --r-sm: 10px; --r: 14px; --r-lg: 20px;
+            --sh-1: 0 1px 2px rgba(0,0,0,0.4);
+            --sh-2: 0 6px 20px rgba(0,0,0,0.45);
+            --sh-3: 0 18px 50px rgba(0,0,0,0.55);
+            --sh-pop: 0 24px 70px rgba(0,0,0,0.65);
+            --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+            --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+        }
+
+        body {
+            font-family: var(--font);
+            background:
+                radial-gradient(1200px 800px at 85% -10%, #1a1322 0%, transparent 55%),
+                radial-gradient(900px 700px at -5% 110%, #0f1a22 0%, transparent 50%),
+                var(--bg-stage);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
+        *::-webkit-scrollbar { width: 9px; height: 9px; }
+        *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+        *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); background-clip: padding-box; }
+        *::-webkit-scrollbar-track { background: transparent; }
+        ::selection { background: var(--accent-soft); }
+
+        /* Brand header */
+        h1.app-brand {
+            color: var(--text);
+            text-shadow: none;
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -.02em;
+            margin-bottom: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 11px;
+        }
+        h1.app-brand b { color: var(--accent); font-weight: 800; }
+        h1.app-brand .brand-mark {
+            width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--accent-ink);
+            background: linear-gradient(150deg, var(--accent) 0%, #ff8a3d 100%);
+            box-shadow: 0 4px 14px rgba(246,183,60,.35), inset 0 1px 0 rgba(255,255,255,.4);
+        }
+
+        /* Panels */
+        .video-list-container,
+        .player-container {
+            background: var(--bg-1);
+            border: 1px solid var(--line);
+            border-radius: var(--r-lg);
+            box-shadow: var(--sh-3);
+        }
+        .video-list-header { border-bottom: 1px solid var(--line); }
+        .video-list-header h2,
+        .info-panel h3, .folder-filter h3, .browse-controls h3,
+        .edit-section h3, .history-section h3, .keyboard-shortcuts h3 { color: var(--text); }
+
+        /* Generic dark buttons */
+        .refresh-btn, .browse-mode-btn, .select-all-btn {
+            background: var(--bg-3);
+            color: var(--text);
+            border: 1px solid var(--line-2);
+            border-radius: var(--r-sm);
+            transition: .16s var(--ease);
+        }
+        .refresh-btn:hover, .browse-mode-btn:hover, .select-all-btn:hover {
+            background: var(--bg-4); border-color: var(--line-3);
+        }
+        .browse-mode-btn.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+        /* Filter / browse / search cards */
+        .folder-filter {
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--accent);
+            border-radius: var(--r);
+        }
+        .browse-controls {
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--good);
+            border-radius: var(--r);
+        }
+        .search-filter {
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            box-shadow: none;
+            border-radius: var(--r);
+        }
+        .extension-filter span { color: var(--text-2); }
+
+        /* Inputs & selects */
+        .search-input, .browse-controls select, .move-select,
+        #bulkMoveTarget, #viewerMoveTarget {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--line-2);
+            color: var(--text);
+            border-radius: var(--r-sm);
+            outline: none;
+            transition: .16s var(--ease);
+        }
+        .search-input::placeholder { color: var(--text-3); }
+        .search-input:focus, .browse-controls select:focus, .move-select:focus {
+            border-color: var(--accent-line);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+            background: rgba(255,255,255,0.06);
+        }
+        .browse-controls select option, .move-select option,
+        #bulkMoveTarget option, #viewerMoveTarget option { background: var(--bg-2); color: var(--text); }
+        .clear-search-btn { background: var(--bg-3); color: var(--text-2); border-radius: var(--r-sm); }
+        .clear-search-btn:hover:not(:disabled) { background: var(--bg-4); color: var(--text); }
+
+        /* Extension chips */
+        .extension-chip {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--line-2);
+            color: var(--text-2);
+        }
+        .extension-chip:hover { color: var(--text); border-color: var(--line-3); }
+        .extension-chip.active {
+            background: var(--accent); color: var(--accent-ink);
+            border-color: transparent; box-shadow: 0 3px 10px rgba(246,183,60,.28);
+        }
+
+        /* Folder checkboxes (the folder rail) */
+        .folder-list { gap: 4px; }
+        .folder-checkbox {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid transparent;
+            border-radius: var(--r-sm);
+            padding: 9px 11px;
+            transition: .15s var(--ease);
+        }
+        .folder-checkbox:hover { background: rgba(255,255,255,0.06); }
+        .folder-checkbox label { color: var(--text); font-weight: 600; }
+        .folder-checkbox input { accent-color: var(--accent); }
+        .folder-count {
+            background: var(--accent-soft); color: var(--accent-2);
+            font-weight: 700; border-radius: 99px;
+        }
+
+        /* Bulk actions */
+        .bulk-actions {
+            background: var(--bg-2);
+            border: 1px dashed var(--line-2);
+            border-radius: var(--r);
+        }
+        .bulk-selection-info { color: var(--text-2); }
+
+        /* Video cards */
+        .video-item {
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-left: 3px solid transparent;
+            border-radius: var(--r);
+            transition: .18s var(--ease);
+        }
+        .video-item:hover {
+            background: var(--bg-3);
+            border-left-color: var(--accent);
+            transform: translateX(3px);
+            box-shadow: var(--sh-2);
+        }
+        .video-item.active {
+            background: var(--accent-soft);
+            border-color: var(--accent-line);
+            border-left-color: var(--accent);
+        }
+        .video-item-name { color: var(--text); }
+        .meta-subline, .thumb-caption { color: var(--text-2); }
+        .video-select input { accent-color: var(--accent); }
+
+        /* Chips & badges */
+        .info-chip {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-2);
+        }
+        .info-chip .label { color: var(--text-3); }
+        .codec-chip { background: rgba(255,255,255,0.04); color: var(--text-2); }
+        .thumb-chip { background: var(--accent-soft); color: var(--accent-2); }
+        .watched-badge { background: var(--good-soft); color: var(--good); }
+        .watching-badge { background: var(--accent-soft); color: var(--accent-2); }
+        .thumb-placeholder { color: var(--text-3); }
+
+        /* Row action buttons */
+        .move-btn, .move-btn-item {
+            background: var(--bg-3); color: var(--text);
+            border: 1px solid var(--line-2); border-radius: var(--r-xs);
+        }
+        .move-btn:hover, .move-btn-item:hover { background: var(--bg-4); border-color: var(--line-3); }
+        .delete-btn {
+            background: var(--bad-soft); color: #ff9aa4;
+            border: 1px solid transparent; border-radius: var(--r-xs);
+        }
+        .delete-btn:hover { background: rgba(240,96,110,.28); color: #fff; }
+
+        /* Speed buttons */
+        .speed-btn {
+            background: var(--bg-3); color: var(--text-2);
+            border: 1px solid var(--line); border-radius: var(--r-sm);
+        }
+        .speed-btn:hover { background: var(--bg-4); color: var(--text); }
+        .speed-btn.active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+
+        /* Primary control buttons */
+        .control-btn {
+            background: var(--bg-3); color: var(--text);
+            border: 1px solid var(--line-2); border-radius: var(--r-sm); font-weight: 600;
+        }
+        .control-btn:hover { background: var(--bg-4); box-shadow: var(--sh-2); transform: translateY(-2px); }
+        /* The fullscreen-viewer launcher → amber primary (overrides its inline gradient) */
+        .controls .control-btn[onclick*="startFullscreenViewer"] {
+            background: var(--accent) !important; color: var(--accent-ink) !important;
+            border-color: transparent; font-weight: 700;
+        }
+        .controls .control-btn[onclick*="startFullscreenViewer"]:hover { background: var(--accent-2) !important; }
+
+        /* Info / history / shortcuts / edit panels */
+        .info-panel { background: var(--bg-2); border: 1px solid var(--line); }
+        .info-panel p { color: var(--text-2); }
+        .history-section {
+            background: var(--bg-2); border: 1px solid var(--line);
+            border-left: 3px solid var(--accent);
+        }
+        .history-section h3 { color: var(--accent-2); }
+        .history-item { background: rgba(255,255,255,0.03); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-sm); }
+        .history-item:hover { background: rgba(255,255,255,0.06); }
+        .keyboard-shortcuts {
+            background: var(--bg-2); border: 1px solid var(--line);
+            border-left: 3px solid var(--info);
+        }
+        .keyboard-shortcuts h3, .keyboard-shortcuts ul, .keyboard-shortcuts li { color: var(--text-2); }
+        .keyboard-shortcuts kbd { background: var(--bg-4); color: var(--text); border: 1px solid var(--line-2); }
+        .edit-section {
+            background: var(--bg-2); border: 1px solid var(--line);
+            border-left: 3px solid var(--accent);
+        }
+        .edit-section h3 { color: var(--accent-2); }
+        .edit-section p { color: var(--text-3) !important; }
+        .edit-hotkeys { color: var(--text-3); }
+        .edit-btn { background: var(--accent-soft); color: var(--accent-2); border: 1px solid var(--accent-line); border-radius: var(--r-sm); }
+        .edit-btn:hover { background: rgba(246,183,60,.24); }
+        .edit-btn:disabled { background: var(--bg-3); color: var(--text-3); border-color: var(--line); }
+        .segment-item { background: rgba(255,255,255,0.03); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-sm); }
+        .segment-remove { background: var(--bad-soft); color: #ff9aa4; }
+        .segment-remove:hover { background: rgba(240,96,110,.28); color: #fff; }
+
+        /* Codec warning / states */
+        .codec-warning { background: var(--accent-soft); color: var(--accent-2); border-left: 3px solid var(--accent); }
+        .no-video, .loading { color: var(--text-3); }
+        .error { background: var(--bad-soft); color: #ffb3ba; border-left: 3px solid var(--bad); }
+
+        /* Breadcrumb */
+        .breadcrumb { background: rgba(255,255,255,0.03); color: var(--text-2); border-radius: var(--r-sm); }
+        .breadcrumb-item { color: var(--accent-2); }
+        .breadcrumb-item:hover { color: var(--accent); }
+        .breadcrumb-separator { color: var(--text-3); }
+
+        /* Browse folder / image rows */
+        .folder-item { background: var(--bg-2) !important; border-left-color: var(--accent) !important; }
+        .folder-item:hover { background: var(--bg-3) !important; }
+        .image-item { background: var(--bg-2) !important; border-left-color: var(--info) !important; }
+        .image-item:hover { background: var(--bg-3) !important; }
+
+        /* Progress overlay */
+        .progress-overlay { background: rgba(0,0,0,0.82); backdrop-filter: blur(6px); }
+        .progress-content { background: var(--bg-2); border: 1px solid var(--line-2); color: var(--text); box-shadow: var(--sh-pop); }
+        .progress-content h2 { color: var(--text); }
+        .progress-bar { background: rgba(255,255,255,0.08); }
+        .progress-fill { background: linear-gradient(90deg, var(--accent), #ff8a3d); }
+        #progressText { color: var(--text-2); }
+
+        /* ===== FULLSCREEN VIEWER — design centerpiece ===== */
+        .viewer-header {
+            background: linear-gradient(180deg, rgba(0,0,0,.72), transparent);
+            box-shadow: none;
+            backdrop-filter: none;
+        }
+        .viewer-title { color: #fff; }
+        .viewer-counter { color: rgba(255,255,255,.6); font-family: var(--mono); }
+        .viewer-btn {
+            background: rgba(255,255,255,.08);
+            border: 1px solid transparent;
+            border-radius: 11px;
+            color: #fff;
+        }
+        .viewer-btn:hover { background: rgba(255,255,255,.18); border-color: transparent; }
+        .viewer-nav-btn {
+            background: rgba(0,0,0,.45);
+            border: 1px solid rgba(255,255,255,.18);
+            border-radius: 50%;
+            width: 52px; height: 52px;
+            padding: 0;
+            font-size: 1.6em;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .viewer-nav-btn:hover { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+        .viewer-info { background: linear-gradient(0deg, rgba(0,0,0,.7), transparent); color: rgba(255,255,255,.55); backdrop-filter: none; }
+        .viewer-action-overlay {
+            background: linear-gradient(0deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.6) 70%, transparent 100%);
+        }
+        .overlay-handle { background: rgba(255,255,255,.45); }
+        /* big sheet buttons — Delete = danger, Move = neutral */
+        .action-btn-large { border-radius: var(--r); }
+        .action-btn-large.delete-btn {
+            background: var(--bad-soft) !important; color: #ff9aa4 !important;
+            border: 1px solid transparent;
+        }
+        .action-btn-large.delete-btn:hover { background: rgba(240,96,110,.26) !important; }
+        .action-btn-large.delete-btn:active { background: rgba(240,96,110,.34) !important; transform: scale(.96); }
+        .action-btn-large.move-btn {
+            background: rgba(255,255,255,.08) !important; color: #fff !important;
+            border: 1px solid transparent;
+        }
+        .action-btn-large.move-btn:hover { background: rgba(255,255,255,.16) !important; }
+        .action-btn-large.move-btn:active { background: rgba(255,255,255,.2) !important; transform: scale(.96); }
+        .action-btn-large.folder-btn { background: var(--accent) !important; color: var(--accent-ink) !important; }
+        /* speed pills inside the overlay */
+        .viewer-action-overlay .action-btn-large:not(.move-btn):not(.delete-btn):not(.folder-btn) {
+            background: rgba(255,255,255,.07); color: #fff;
+        }
+        .viewer-action-overlay .action-btn-large:not(.move-btn):not(.delete-btn):not(.folder-btn):hover {
+            background: var(--accent-soft); color: var(--accent-2);
+        }
+        .folder-action-btn.enter { background: var(--accent); color: var(--accent-ink); }
+        .folder-action-btn.skip { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.22); }
+        .folder-name-large { color: #fff; }
+
+        /* Image viewer */
+        .image-viewer-name { color: var(--text); }
+
+        /* ===== TOAST (delete + undo) ===== */
+        .toast {
+            position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(140%);
+            z-index: 6000; display: flex; align-items: center; gap: 12px;
+            padding: 12px 14px 12px 18px;
+            background: rgba(20,26,36,.96); border: 1px solid var(--line-2);
+            border-radius: 99px; box-shadow: var(--sh-pop); backdrop-filter: blur(14px);
+            max-width: min(92vw, 460px); opacity: 0; pointer-events: none;
+            transition: transform .3s var(--ease), opacity .3s var(--ease);
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+        .toast .toast-msg {
+            font-size: 13.5px; font-weight: 600; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;
+        }
+        .toast .toast-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+        .toast.delete .toast-dot { background: var(--bad); }
+        .toast.move   .toast-dot { background: var(--good); }
+        .toast .toast-undo {
+            font-size: 13px; font-weight: 700; color: var(--accent);
+            padding: 7px 14px; border-radius: 99px; background: var(--accent-soft);
+            transition: .15s var(--ease); flex: 0 0 auto; white-space: nowrap;
+        }
+        .toast .toast-undo:hover { background: rgba(246,183,60,.26); }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎬 FlexPlay</h1>
+        <h1 class="app-brand">
+            <span class="brand-mark">
+                <svg width="22" height="22" viewBox="0 0 24 24"><path d="M7 4.5l13 7.5-13 7.5z" fill="currentColor"/></svg>
+            </span>
+            Flex<b>Play</b>
+        </h1>
 
         <div class="main-layout">
             <!-- Video List -->
@@ -1769,6 +2164,13 @@
         </div>
     </div>
 
+    <!-- 토스트 (삭제/이동 알림 + 실행취소) -->
+    <div class="toast" id="toast">
+        <span class="toast-dot"></span>
+        <span class="toast-msg" id="toastMsg"></span>
+        <button class="toast-undo" id="toastUndo" type="button">실행취소</button>
+    </div>
+
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
         const videoWrapper = document.getElementById('videoWrapper');
@@ -1798,6 +2200,31 @@
         let previousAudioState = { muted: videoPlayer.muted, volume: videoPlayer.volume };
         let selectedVideoNames = new Set();
         let bulkMoveInProgress = false;
+        const pendingDeletes = new Map();  // filename -> { timer, el } : 토스트 동안 보류된 삭제
+
+        // ===== 토스트 (삭제/이동 알림 + 실행취소) =====
+        function showToast(msg, kind, undoFn, duration = 4500) {
+            const toast = document.getElementById('toast');
+            if (!toast) return;
+            const msgEl = document.getElementById('toastMsg');
+            const undoBtn = document.getElementById('toastUndo');
+            toast.className = 'toast ' + (kind || '');
+            msgEl.textContent = msg;
+            if (undoFn) {
+                undoBtn.style.display = '';
+                undoBtn.onclick = () => { undoFn(); hideToast(); };
+            } else {
+                undoBtn.style.display = 'none';
+            }
+            requestAnimationFrame(() => toast.classList.add('show'));
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(hideToast, duration);
+        }
+        function hideToast() {
+            const toast = document.getElementById('toast');
+            if (toast) toast.classList.remove('show');
+            clearTimeout(showToast._t);
+        }
 
         // 화면 자동 꺼짐 방지: iOS Safari는 비디오 재생 중 자동으로 화면 유지
         // 추가 속성 (playsinline, x5-playsinline, x-webkit-airplay 등)으로 강화
@@ -2327,6 +2754,11 @@
             const container = document.getElementById('videoList');
             const hasFilter = searchTerm.trim().length > 0 || selectedExtensions.size > 0;
 
+            // 토스트 동안 보류 중인 삭제 항목은 목록에서 숨김 (실행취소 시 자연 복원)
+            if (pendingDeletes.size > 0 && Array.isArray(videoList)) {
+                videoList = videoList.filter(v => !pendingDeletes.has(v.name));
+            }
+
             if (!videoList || videoList.length === 0) {
                 container.innerHTML = hasFilter
                     ? '<div class="no-video">검색/필터 조건과 일치하는 영상이 없습니다.</div>'
@@ -2573,34 +3005,54 @@
         }
 
         // 영상 삭제
-        async function deleteVideo(filename, event) {
-            event.stopPropagation();
+        // 목록에서 즉시 삭제 — 실제 서버 삭제는 토스트가 사라진 뒤 커밋되므로
+        // 그 사이 "실행취소"로 되돌릴 수 있다 (백엔드 변경 없이 안전한 undo).
+        function deleteVideo(filename, event) {
+            if (event) event.stopPropagation();
+            if (pendingDeletes.has(filename)) return;
 
+            const el = document.querySelector(`.video-item[data-filename="${encodeURIComponent(filename)}"]`);
+            if (el) el.style.display = 'none';
+
+            const timer = setTimeout(() => {
+                pendingDeletes.delete(filename);
+                commitDeleteVideo(filename);
+            }, 4500);
+            pendingDeletes.set(filename, { timer, el });
+
+            showToast(`"${filename}" 삭제됨`, 'delete', () => {
+                const p = pendingDeletes.get(filename);
+                if (!p) return;
+                clearTimeout(p.timer);
+                if (p.el) p.el.style.display = '';
+                pendingDeletes.delete(filename);
+            });
+        }
+
+        async function commitDeleteVideo(filename) {
             try {
                 const response = await fetch(`/api/delete/${encodeURIComponent(filename)}`, {
                     method: 'DELETE'
                 });
-
                 const result = await response.json();
 
                 if (result.success) {
-                    // 현재 재생 중인 영상이면 먼저 정지
                     if (currentVideo === filename) {
                         videoPlayer.pause();
                         videoSource.src = '';
                         currentVideo = null;
                         document.getElementById('infoPanel').style.display = 'none';
                     }
-
-                    // 목록 새로고침 (await로 확실하게 완료 대기)
                     await loadVideos();
                     await loadHistory();
                 } else {
-                    alert('삭제 실패: ' + result.error);
+                    showToast('삭제 실패: ' + result.error, 'delete');
+                    await loadVideos();
                 }
             } catch (error) {
-                alert('삭제 중 오류가 발생했습니다.');
                 console.error('Error deleting video:', error);
+                showToast('삭제 중 오류가 발생했습니다.', 'delete');
+                await loadVideos();
             }
         }
 
@@ -4468,6 +4920,7 @@
                 const result = await response.json();
 
                 if (result.success) {
+                    showToast(`"${item.name}" 삭제됨`, 'delete');
                     // 아이템 목록에서 제거
                     viewerItems.splice(viewerCurrentIndex, 1);
                     if (browseItems && browseItems.length > 0) {
