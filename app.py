@@ -122,6 +122,15 @@ VIDEO_EXTENSIONS = {
     '.amv',  # AMV
 }
 
+# 브라우저(특히 iOS/macOS Safari)에서 별도 트랜스코딩 없이 재생 가능한 코덱/컨테이너
+# 아래 조건을 모두 만족하면 원본 그대로 재생, 하나라도 어긋나면 트랜스코딩(또는 리먹스) 필요
+BROWSER_COMPATIBLE_VIDEO_CODECS = {'h264', 'avc', 'avc1', 'hevc', 'h265', 'hvc1'}
+BROWSER_COMPATIBLE_AUDIO_CODECS = {'aac', 'mp4a', 'mp3', 'mp4a.40.2', 'alac'}
+BROWSER_COMPATIBLE_CONTAINERS = {'.mp4', '.m4v', '.mov', '.qt'}
+# 스트림 복사(copy)만으로 mp4 컨테이너에 담아 재생 가능한 코덱 (재인코딩 불필요 = 가장 빠름)
+COPYABLE_VIDEO_CODECS = {'h264', 'avc', 'avc1', 'hevc', 'h265', 'hvc1'}
+COPYABLE_AUDIO_CODECS = {'aac', 'mp4a', 'mp3', 'alac'}
+
 # 지원하는 이미지 파일 확장자
 IMAGE_EXTENSIONS = {
     '.jpg', '.jpeg',  # JPEG
@@ -547,6 +556,7 @@ def get_media_info(file_path):
             if codec:
                 codec_label = codec.upper() if len(codec) <= 6 else codec
                 metadata['video_codec_info'] = f"{codec_label} ({resolution})" if resolution else codec_label
+                metadata['video_codec'] = (video_stream.get('codec_name') or '').lower()
             if resolution:
                 metadata['resolution'] = resolution
 
@@ -559,12 +569,46 @@ def get_media_info(file_path):
             if codec:
                 codec_label = codec.upper() if len(codec) <= 6 else codec
                 metadata['audio_codec_info'] = f"{codec_label} ({channel_desc})" if channel_desc else codec_label
+                metadata['audio_codec'] = (audio_stream.get('codec_name') or '').lower()
+
+        # 브라우저 호환성 판단 (코덱 + 컨테이너) → needs_transcode 플래그
+        metadata.update(compute_transcode_requirement(file_path, metadata))
 
     except Exception:
         metadata = {}
 
     media_info_cache[file_path] = {'mtime': mtime, 'data': metadata}
     return metadata
+
+
+def compute_transcode_requirement(file_path, metadata):
+    """코덱/컨테이너를 검사해 브라우저 직접 재생 가능 여부와 트랜스코딩 필요성을 판단한다.
+
+    반환: {'needs_transcode': bool, 'transcode_reason': str}
+    - 비디오 코덱이 호환되지 않으면 재인코딩 필요
+    - 오디오 코덱만 비호환이면 오디오만 재인코딩
+    - 코덱은 호환되나 컨테이너만 비호환이면 리먹스(스트림 copy)만 필요 → 가장 빠름
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    video_codec = (metadata.get('video_codec') or '').lower()
+    audio_codec = (metadata.get('audio_codec') or '').lower()
+
+    video_ok = (not video_codec) or video_codec in BROWSER_COMPATIBLE_VIDEO_CODECS
+    audio_ok = (not audio_codec) or audio_codec in BROWSER_COMPATIBLE_AUDIO_CODECS
+    container_ok = ext in BROWSER_COMPATIBLE_CONTAINERS
+
+    reasons = []
+    if not video_ok:
+        reasons.append(f"video:{video_codec}")
+    if not audio_ok:
+        reasons.append(f"audio:{audio_codec}")
+    if not container_ok:
+        reasons.append(f"container:{ext}")
+
+    return {
+        'needs_transcode': not (video_ok and audio_ok and container_ok),
+        'transcode_reason': ','.join(reasons),
+    }
 
 
 def get_video_files(folder_filter=None):
@@ -1139,6 +1183,63 @@ def hls_segment(filename, segment_name):
     return send_file(segment_path, mimetype='video/mp2t')
 
 
+def build_full_transcode_command(video_path, cache_path):
+    """최대 호환성 전체 재인코딩 (폴백용) — iOS 호환 H.264 baseline + AAC"""
+    return [
+        'ffmpeg', '-y',
+        '-i', video_path,
+        '-map', '0:v:0?', '-map', '0:a:0?',
+        '-c:v', 'libx264',
+        '-profile:v', 'baseline',
+        '-level', '3.0',
+        '-preset', 'fast',
+        '-crf', '23',
+        '-maxrate', '2M',
+        '-bufsize', '4M',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-movflags', '+faststart',
+        '-f', 'mp4',
+        cache_path
+    ]
+
+
+def build_fast_playback_command(video_path, cache_path, media_info):
+    """코덱 검사 결과를 바탕으로 가장 빠른 재생용 ffmpeg 명령을 만든다.
+
+    - 비디오/오디오 코덱이 mp4에 그대로 담을 수 있으면 copy(재인코딩 없음 = 최속)
+    - 비호환 스트림만 선택적으로 재인코딩
+    """
+    video_codec = (media_info.get('video_codec') or '').lower()
+    audio_codec = (media_info.get('audio_codec') or '').lower()
+    has_audio = bool(audio_codec)
+
+    cmd = ['ffmpeg', '-y', '-i', video_path,
+           '-map', '0:v:0?', '-map', '0:a:0?']
+
+    # 비디오
+    if video_codec in COPYABLE_VIDEO_CODECS:
+        cmd += ['-c:v', 'copy']
+        if video_codec in {'hevc', 'h265', 'hvc1'}:
+            cmd += ['-tag:v', 'hvc1']  # Safari가 인식하도록 HEVC 태그 지정
+    else:
+        cmd += ['-c:v', 'libx264', '-profile:v', 'high', '-level', '4.1',
+                '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p']
+
+    # 오디오
+    if not has_audio:
+        cmd += ['-an']
+    elif audio_codec in COPYABLE_AUDIO_CODECS:
+        cmd += ['-c:a', 'copy']
+    else:
+        cmd += ['-c:a', 'aac', '-b:a', '160k', '-ar', '48000']
+
+    cmd += ['-movflags', '+faststart', '-f', 'mp4', cache_path]
+    return cmd
+
+
 @app.route('/api/transcode/<path:filename>')
 def transcode_video(filename):
     """트랜스코딩 스트리밍 (iOS 호환 - 캐시 기반)"""
@@ -1158,39 +1259,30 @@ def transcode_video(filename):
 
     # 캐시 파일이 없거나 원본보다 오래된 경우 트랜스코딩
     if not os.path.exists(cache_path) or os.path.getmtime(video_path) > os.path.getmtime(cache_path):
-        # FFmpeg 명령어: iOS 호환 H.264 + AAC로 트랜스코딩
-        ffmpeg_cmd = [
-            'ffmpeg', '-y',
-            '-i', video_path,
-            '-c:v', 'libx264',           # H.264 비디오 코덱
-            '-profile:v', 'baseline',     # Baseline profile (최대 호환성)
-            '-level', '3.0',              # Level 3.0 (iOS 호환)
-            '-preset', 'fast',            # 빠른 인코딩
-            '-crf', '23',                 # 품질 (18-28, 낮을수록 고화질)
-            '-maxrate', '2M',             # 최대 비트레이트
-            '-bufsize', '4M',             # 버퍼 크기
-            '-pix_fmt', 'yuv420p',        # Pixel format (iOS 필수)
-            '-c:a', 'aac',                # AAC 오디오 코덱
-            '-b:a', '128k',               # 오디오 비트레이트
-            '-ar', '44100',               # 오디오 샘플레이트
-            '-movflags', '+faststart',    # 웹 스트리밍 최적화
-            '-f', 'mp4',                  # MP4 형식
-            cache_path
-        ]
+        # 코덱을 검사해 "가장 빠른" 방법 선택: 호환 스트림은 copy(리먹스), 비호환만 재인코딩
+        media_info = get_media_info(video_path)
+        ffmpeg_cmd = build_fast_playback_command(video_path, cache_path, media_info)
 
         try:
-            # 트랜스코딩 실행
-            result = subprocess.run(
-                ffmpeg_cmd,
-                capture_output=True,
-                check=True,
-                timeout=600  # 10분 타임아웃
-            )
+            subprocess.run(ffmpeg_cmd, capture_output=True, check=True, timeout=600)
         except subprocess.CalledProcessError as e:
-            return jsonify({
-                'error': 'Transcoding failed',
-                'details': e.stderr.decode('utf-8') if e.stderr else 'Unknown error'
-            }), 500
+            # copy(리먹스)가 실패하면 안전하게 전체 재인코딩으로 폴백
+            fallback_cmd = build_full_transcode_command(video_path, cache_path)
+            if ffmpeg_cmd != fallback_cmd:
+                try:
+                    subprocess.run(fallback_cmd, capture_output=True, check=True, timeout=600)
+                except subprocess.CalledProcessError as e2:
+                    return jsonify({
+                        'error': 'Transcoding failed',
+                        'details': e2.stderr.decode('utf-8') if e2.stderr else 'Unknown error'
+                    }), 500
+                except subprocess.TimeoutExpired:
+                    return jsonify({'error': 'Transcoding timeout'}), 500
+            else:
+                return jsonify({
+                    'error': 'Transcoding failed',
+                    'details': e.stderr.decode('utf-8') if e.stderr else 'Unknown error'
+                }), 500
         except subprocess.TimeoutExpired:
             return jsonify({'error': 'Transcoding timeout'}), 500
 

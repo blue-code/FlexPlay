@@ -2519,15 +2519,10 @@
             }
             // 일반 또는 트랜스코딩 재생
             else {
-                let endpoint;
-                // 무소음 모드에서도 일반 비디오 사용 (iOS 화면 꺼짐 방지를 위해 오디오 트랙 필요)
-                if (transcodeEnabled) {
-                    endpoint = `/api/transcode/${encodeURIComponent(filename)}`;
-                } else {
-                    endpoint = `/api/video/${encodeURIComponent(filename)}`;
-                }
+                // 무소음 모드 비호환 코덱은 자동 트랜스코딩, 그 외엔 원본 재생
+                const endpoint = resolvePlaybackEndpoint(filename);
 
-                console.log('[Video] 로드 URL:', endpoint, '| 무소음 모드:', silentPlaylistEnabled);
+                console.log('[Video] 로드 URL:', endpoint, '| 무소음 모드:', silentPlaylistEnabled, '| 자동 트랜스코딩:', shouldAutoTranscode(filename));
                 videoSource.src = endpoint;
                 videoPlayer.load();
                 applySilentAudioState();
@@ -2727,11 +2722,15 @@
 
         async function requestFullscreenForSilentPlaylistStart() {
             const currentMode = detectFullscreenMode();
-            if (currentMode) {
+            // iOS 네이티브 전체화면이 이미 켜져 있으면 그대로 유지(재요청 시 깜빡임 방지)
+            if (currentMode === 'native') {
                 lastKnownFullscreenMode = currentMode;
                 fullscreenExitDetectedAt = 0;
                 return currentMode;
             }
+            // 'element'가 감지되더라도 직전 종료(exitFullscreen)가 진행 중인 stale 상태일 수 있음.
+            // 사용자 제스처 컨텍스트에서 전체화면을 "다시" 요청해야 창모드로 떨어지는 문제를 막을 수 있어,
+            // 아래로 흘려보내 항상 명시적으로 재요청한다. (이미 진짜 전체화면이면 같은 요소 재요청은 no-op)
 
             let requestedMode = null;
             let attemptedFullscreenRequest = false;
@@ -3027,6 +3026,28 @@
             }
         }
 
+        // 현재 영상 메타데이터 조회
+        function videoMetaFor(filename) {
+            return (videos || []).find(v => v.name === filename) || null;
+        }
+
+        // 무소음 전체재생 모드에서 코덱/컨테이너가 브라우저 비호환이면 자동 트랜스코딩 대상
+        function shouldAutoTranscode(filename) {
+            if (!silentPlaylistEnabled) return false;
+            const meta = videoMetaFor(filename);
+            return !!(meta && meta.needs_transcode);
+        }
+
+        // 가장 빠른 재생 엔드포인트 결정
+        // - 수동 트랜스코딩 ON 또는 무소음 모드에서 비호환 코덱 → /api/transcode (호환 스트림은 copy로 리먹스, 비호환만 재인코딩)
+        // - 그 외 → 원본 /api/video
+        function resolvePlaybackEndpoint(filename) {
+            if (transcodeEnabled || shouldAutoTranscode(filename)) {
+                return `/api/transcode/${encodeURIComponent(filename)}`;
+            }
+            return `/api/video/${encodeURIComponent(filename)}`;
+        }
+
         // 내부 재생 함수 (시간 복원 포함)
         async function playVideoInternal(filename, seekTime = 0, autoPlay = false, fullscreenModeHint = null) {
             if (historySaveHandle) {
@@ -3158,15 +3179,10 @@
             }
             // 일반 또는 트랜스코딩 재생
             else {
-                let endpoint;
-                // 무소음 모드에서도 일반 비디오 사용 (iOS 화면 꺼짐 방지를 위해 오디오 트랙 필요)
-                if (transcodeEnabled) {
-                    endpoint = `/api/transcode/${encodeURIComponent(filename)}`;
-                } else {
-                    endpoint = `/api/video/${encodeURIComponent(filename)}`;
-                }
+                // 무소음 모드 비호환 코덱은 자동 트랜스코딩, 그 외엔 원본 재생
+                const endpoint = resolvePlaybackEndpoint(filename);
 
-                console.log('[Video] 로드 URL:', endpoint, '| 무소음 모드:', silentPlaylistEnabled);
+                console.log('[Video] 로드 URL:', endpoint, '| 무소음 모드:', silentPlaylistEnabled, '| 자동 트랜스코딩:', shouldAutoTranscode(filename));
                 videoSource.src = endpoint;
                 videoPlayer.load();
 
@@ -4347,7 +4363,11 @@
                     container.appendChild(img);
                 } else if (item.type === 'video') {
                     const fullPath = item.folder ? item.name : (browsePath ? `${browsePath}/${item.name}` : item.name);
-                    const videoUrl = `/api/video/${encodeURIComponent(fullPath)}`;
+                    // 무소음 전체재생(뷰어 fallback)에서 비호환 코덱은 자동 트랜스코딩으로 재생
+                    const autoTranscodeViewer = viewerSilentFallbackActive && item.needs_transcode;
+                    const videoUrl = autoTranscodeViewer
+                        ? `/api/transcode/${encodeURIComponent(fullPath)}`
+                        : `/api/video/${encodeURIComponent(fullPath)}`;
                     const video = document.createElement('video');
 
                     // iOS 인라인 재생을 위한 모든 속성 설정
