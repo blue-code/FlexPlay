@@ -2614,15 +2614,23 @@
             if (viewerBtn) viewerBtn.disabled = mediaN === 0;
         }
 
+        function browseItemFullPath(item) {
+            return browsePath ? `${browsePath}/${item.name}` : item.name;
+        }
+
         function renderFolderBrowseGrid(list) {
             const container = document.getElementById('videoList');
             if (!container) return;
             container.classList.add('vgrid');
-            if (!list || list.length === 0) {
+            // 보류 중 삭제 항목 숨김 (실행취소 시 자연 복원)
+            const shown = (list || []).filter(it => !(it.type === 'video' && pendingDeletes.has(browseItemFullPath(it))));
+            if (shown.length === 0) {
                 container.innerHTML = `<div class="empty-grid">${SVG.filmBig}<div>이 폴더가 비어 있어요</div></div>`;
                 return;
             }
-            container.innerHTML = list.map(item => {
+            const gsEl = document.querySelector('.grid-scroll');
+            const prevScroll = gsEl ? gsEl.scrollTop : 0;
+            container.innerHTML = shown.map(item => {
                 const i = item._idx;
                 if (item.type === 'folder') {
                     return `
@@ -2639,8 +2647,10 @@
                         ? `<img src="${item.thumbnail_url}${ver}" alt="" loading="lazy">`
                         : `<div class="thumb-placeholder">${item.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                     const dur = item.duration ? formatDurationShort(item.duration) : '';
+                    const encPath = encodeURIComponent(browseItemFullPath(item));
                     return `
-                        <div class="vcard" onclick="openBrowseMediaByIdx(${i})">
+                        <div class="vcard" data-filename="${encPath}" onclick="openBrowseMediaByIdx(${i})">
+                            <button class="card-del" title="삭제" onclick="event.stopPropagation(); deleteBrowseVideoByIdx(${i})">${SVG.trash}</button>
                             <div class="poster">
                                 ${thumb}
                                 <div class="sheen"></div>
@@ -2662,6 +2672,8 @@
                 }
                 return '';
             }).join('');
+            if (gsEl) gsEl.scrollTop = prevScroll;
+            scheduleThumbnailRefresh(browseItems);
         }
 
         function enterSubFolderByIdx(i) {
@@ -2676,6 +2688,13 @@
             const it = browseItems[i];
             if (!it) return;
             deleteBrowseFolder(it.name, { stopPropagation() {}, preventDefault() {} });
+        }
+
+        // 폴더 탐색 그리드의 영상 즉시 삭제 (지연 삭제 + 실행취소)
+        function deleteBrowseVideoByIdx(i) {
+            const it = browseItems[i];
+            if (!it || it.type !== 'video') return;
+            deleteVideo(browseItemFullPath(it));
         }
 
         function openBrowseMediaByIdx(i) {
@@ -3368,6 +3387,8 @@
                 return;
             }
 
+            const gsEl = document.querySelector('.grid-scroll');
+            const prevScroll = gsEl ? gsEl.scrollTop : 0;
             container.innerHTML = scoped.map((video, idx) => {
                 const encodedName = encodeURIComponent(video.name);
                 const thumbnailVersion = video.modified ? encodeURIComponent(video.modified) : '';
@@ -3403,24 +3424,37 @@
                     </div>
                 `;
             }).join('');
+            if (gsEl) gsEl.scrollTop = prevScroll;   // 백그라운드 새로고침 시 스크롤 유지
 
-            scheduleThumbnailRefresh();
+            scheduleThumbnailRefresh(scoped);
         }
 
-        function scheduleThumbnailRefresh() {
+        // 썸네일 생성 + 메타데이터(ffprobe) 백그라운드 워밍을 위해 목록을 주기적으로
+        // 다시 가져온다. 메타데이터 누락은 횟수 제한(무한 새로고침 방지)을 둔다.
+        let metaRefreshAttempts = 0;
+        function scheduleThumbnailRefresh(items) {
             if (thumbnailRefreshHandle) {
                 clearTimeout(thumbnailRefreshHandle);
-            }
-
-            const pending = videos.some(video => video.thumbnail_pending);
-            if (!pending) {
                 thumbnailRefreshHandle = null;
+            }
+            const arr = Array.isArray(items) ? items : (Array.isArray(videos) ? videos : []);
+            const pendingThumb = arr.some(v => v.thumbnail_pending);
+            const missingMeta = metaRefreshAttempts < 4 &&
+                arr.some(v => (!v.type || v.type === 'video') && (v.duration == null));
+
+            if (!pendingThumb && !missingMeta) {
+                metaRefreshAttempts = 0;
                 return;
             }
+            if (missingMeta) metaRefreshAttempts += 1;
 
             thumbnailRefreshHandle = setTimeout(() => {
-                loadVideos({ skipLoader: true, includeMeta: false });
-            }, 4000);
+                if (currentFolder !== 'all') {
+                    loadFolderBrowse();
+                } else {
+                    loadVideos({ skipLoader: true });
+                }
+            }, missingMeta ? 3000 : 4000);
         }
 
         // 영상 재생
@@ -3593,6 +3627,7 @@
         }
 
         async function commitDeleteVideo(filename) {
+            const refresh = () => (currentFolder !== 'all' ? loadFolderBrowse() : loadVideos());
             try {
                 const response = await fetch(`/api/delete/${encodeURIComponent(filename)}`, {
                     method: 'DELETE'
@@ -3606,16 +3641,16 @@
                         currentVideo = null;
                         document.getElementById('infoPanel').style.display = 'none';
                     }
-                    await loadVideos();
+                    await refresh();
                     await loadHistory();
                 } else {
                     showToast('삭제 실패: ' + result.error, 'delete');
-                    await loadVideos();
+                    await refresh();
                 }
             } catch (error) {
                 console.error('Error deleting video:', error);
                 showToast('삭제 중 오류가 발생했습니다.', 'delete');
-                await loadVideos();
+                await refresh();
             }
         }
 

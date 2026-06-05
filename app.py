@@ -2,6 +2,7 @@ import os
 import json
 import subprocess
 import threading
+import queue
 import uuid
 import time
 import shutil
@@ -482,8 +483,14 @@ def matches_search_query(video, query):
     return any(query in (field or '').lower() for field in fields)
 
 
-def get_media_info(file_path):
-    """영상 코덱/해상도 등의 메타데이터 추출 (ffprobe 결과를 캐시)"""
+def get_media_info(file_path, probe=True):
+    """영상 코덱/해상도 등의 메타데이터 추출 (ffprobe 결과를 캐시).
+
+    probe=False(목록 조회용 경량 모드): 캐시가 있으면 그 값을, 없으면 즉시 빈
+    dict를 반환하고 백그라운드 큐에 ffprobe를 예약한다. 수백 개 파일을 동기
+    ffprobe하느라 초기 로딩이 느려지는 것을 막기 위함. (캐시가 채워지면 다음
+    조회부터 메타데이터가 표시됨)
+    """
     try:
         mtime = os.path.getmtime(file_path)
     except OSError:
@@ -493,10 +500,30 @@ def get_media_info(file_path):
     if cache_entry and cache_entry['mtime'] == mtime:
         return cache_entry['data']
 
+    if not probe:
+        _enqueue_media_probe(file_path)
+        return {}
+
+    return _probe_media_info(file_path, mtime)
+
+
+def _probe_media_info(file_path, mtime=None):
+    """실제 ffprobe 수행 + 캐시 저장 (동기)."""
+    if mtime is None:
+        try:
+            mtime = os.path.getmtime(file_path)
+        except OSError:
+            return {}
+
+    # 워커가 이미 채웠을 수 있으니 재확인
+    cache_entry = media_info_cache.get(file_path)
+    if cache_entry and cache_entry['mtime'] == mtime:
+        return cache_entry['data']
+
     cmd = [
         'ffprobe', '-v', 'error',
         '-show_entries',
-        'format=bit_rate:stream=index,codec_type,codec_name,codec_long_name,width,height,coded_width,coded_height,sample_aspect_ratio,bit_rate,channels,channel_layout,side_data_list,tags',
+        'format=bit_rate,duration:stream=index,codec_type,codec_name,codec_long_name,width,height,coded_width,coded_height,sample_aspect_ratio,bit_rate,duration,channels,channel_layout,side_data_list,tags',
         '-of', 'json',
         file_path
     ]
@@ -521,6 +548,13 @@ def get_media_info(file_path):
 
         metadata['bitrate'] = parse_bit_rate(format_info.get('bit_rate'))
         duration = parse_float(format_info.get('duration'))
+        if not (duration and duration > 0):
+            # 일부 컨테이너는 format에 duration이 없음 → 스트림에서 보강
+            for s in streams:
+                sd = parse_float(s.get('duration'))
+                if sd and sd > 0:
+                    duration = sd
+                    break
         if duration and duration > 0:
             metadata['duration'] = duration
 
@@ -587,6 +621,38 @@ def get_media_info(file_path):
     return metadata
 
 
+# ── 메타데이터 백그라운드 워밍 (목록 조회를 막지 않도록) ───────────────────────
+_media_probe_queue = queue.Queue()
+_media_probe_inflight = set()
+_media_probe_lock = threading.Lock()
+
+
+def _enqueue_media_probe(file_path):
+    """ffprobe를 백그라운드 워커에 예약 (중복 방지)."""
+    with _media_probe_lock:
+        if file_path in _media_probe_inflight:
+            return
+        _media_probe_inflight.add(file_path)
+    _media_probe_queue.put(file_path)
+
+
+def _media_probe_worker():
+    while True:
+        path = _media_probe_queue.get()
+        try:
+            _probe_media_info(path)
+        except Exception:
+            pass
+        finally:
+            with _media_probe_lock:
+                _media_probe_inflight.discard(path)
+            _media_probe_queue.task_done()
+
+
+for _ in range(3):
+    threading.Thread(target=_media_probe_worker, daemon=True).start()
+
+
 def compute_transcode_requirement(file_path, metadata):
     """코덱/컨테이너를 검사해 브라우저 직접 재생 가능 여부와 트랜스코딩 필요성을 판단한다.
 
@@ -646,7 +712,7 @@ def get_video_files(folder_filter=None):
                 ext = os.path.splitext(file)[1].lower()
                 if ext in VIDEO_EXTENSIONS:
                     stat = os.stat(file_path)
-                    media_info = get_media_info(file_path)
+                    media_info = get_media_info(file_path, probe=False)  # 경량: 캐시만, 동기 ffprobe 안 함
                     thumbnail_url, thumbnail_pending = ensure_thumbnail_ready(
                         file_path,
                         folder_path,
@@ -920,7 +986,7 @@ def browse_directory():
                 # 영상 파일
                 if ext in VIDEO_EXTENSIONS:
                     stat = os.stat(entry_path)
-                    media_info = get_media_info(entry_path)
+                    media_info = get_media_info(entry_path, probe=False)  # 경량: 캐시만
                     thumbnail_url, thumbnail_pending = ensure_thumbnail_ready(
                         entry_path,
                         current_path,
