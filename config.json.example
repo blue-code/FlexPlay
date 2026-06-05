@@ -13,7 +13,8 @@
     "max_age_days": 7,
     "max_size_gb": 50,
     "cleanup_interval_hours": 24,
-    "thumbnail_retention_days": 7
+    "thumbnail_retention_days": 7,
+    "silent_transcode_retention_hours": 24
   },
   "move_targets": [
     {

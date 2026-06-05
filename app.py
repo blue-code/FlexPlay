@@ -81,9 +81,15 @@ def get_cache_settings():
         'max_age_days': 7,
         'max_size_gb': 50,
         'cleanup_interval_hours': 24,
-        'thumbnail_retention_days': 7
+        'thumbnail_retention_days': 7,
+        # 무소음 전체재생용 자동 트랜스코딩 캐시는 임시성이 강하므로 더 짧게 보존.
+        # 마지막 사용(접근) 후 이 시간이 지나면 자동 삭제. (시간 단위)
+        'silent_transcode_retention_hours': 24
     }
-    return config.get('cache_settings', default_settings)
+    # 사용자 설정과 기본값을 병합해 일부 키만 지정해도 누락되지 않도록 한다.
+    merged = dict(default_settings)
+    merged.update(config.get('cache_settings', {}) or {})
+    return merged
 
 # 지원하는 영상 파일 확장자 (광범위한 코덱 지원)
 VIDEO_EXTENSIONS = {
@@ -608,6 +614,9 @@ def compute_transcode_requirement(file_path, metadata):
     return {
         'needs_transcode': not (video_ok and audio_ok and container_ok),
         'transcode_reason': ','.join(reasons),
+        # 무소음 전체재생은 오디오를 사용하지 않으므로 오디오 코덱은 무시하고
+        # 비디오 코덱/컨테이너만으로 트랜스코딩 필요 여부를 판단한다.
+        'needs_transcode_silent': not (video_ok and container_ok),
     }
 
 
@@ -1183,12 +1192,21 @@ def hls_segment(filename, segment_name):
     return send_file(segment_path, mimetype='video/mp2t')
 
 
-def build_full_transcode_command(video_path, cache_path):
-    """최대 호환성 전체 재인코딩 (폴백용) — iOS 호환 H.264 baseline + AAC"""
-    return [
+def build_full_transcode_command(video_path, cache_path, silent=False):
+    """최대 호환성 전체 재인코딩 (폴백용) — iOS 호환 H.264 baseline + AAC.
+
+    silent=True면 오디오를 완전히 제거(-an)한다 (무소음 전체재생 전용).
+    """
+    cmd = [
         'ffmpeg', '-y',
         '-i', video_path,
-        '-map', '0:v:0?', '-map', '0:a:0?',
+        '-map', '0:v:0?',
+    ]
+    if silent:
+        cmd += ['-an']
+    else:
+        cmd += ['-map', '0:a:0?']
+    cmd += [
         '-c:v', 'libx264',
         '-profile:v', 'baseline',
         '-level', '3.0',
@@ -1197,27 +1215,27 @@ def build_full_transcode_command(video_path, cache_path):
         '-maxrate', '2M',
         '-bufsize', '4M',
         '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-ar', '44100',
-        '-movflags', '+faststart',
-        '-f', 'mp4',
-        cache_path
     ]
+    if not silent:
+        cmd += ['-c:a', 'aac', '-b:a', '128k', '-ar', '44100']
+    cmd += ['-movflags', '+faststart', '-f', 'mp4', cache_path]
+    return cmd
 
 
-def build_fast_playback_command(video_path, cache_path, media_info):
+def build_fast_playback_command(video_path, cache_path, media_info, silent=False):
     """코덱 검사 결과를 바탕으로 가장 빠른 재생용 ffmpeg 명령을 만든다.
 
     - 비디오/오디오 코덱이 mp4에 그대로 담을 수 있으면 copy(재인코딩 없음 = 최속)
     - 비호환 스트림만 선택적으로 재인코딩
+    - silent=True면 오디오를 아예 제거(-an)해 무소음 재생용으로 더 가볍게 만든다.
     """
     video_codec = (media_info.get('video_codec') or '').lower()
     audio_codec = (media_info.get('audio_codec') or '').lower()
     has_audio = bool(audio_codec)
 
-    cmd = ['ffmpeg', '-y', '-i', video_path,
-           '-map', '0:v:0?', '-map', '0:a:0?']
+    cmd = ['ffmpeg', '-y', '-i', video_path, '-map', '0:v:0?']
+    if not silent:
+        cmd += ['-map', '0:a:0?']
 
     # 비디오
     if video_codec in COPYABLE_VIDEO_CODECS:
@@ -1228,8 +1246,8 @@ def build_fast_playback_command(video_path, cache_path, media_info):
         cmd += ['-c:v', 'libx264', '-profile:v', 'high', '-level', '4.1',
                 '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p']
 
-    # 오디오
-    if not has_audio:
+    # 오디오 (무소음 모드는 트랙 제거)
+    if silent or not has_audio:
         cmd += ['-an']
     elif audio_codec in COPYABLE_AUDIO_CODECS:
         cmd += ['-c:a', 'copy']
@@ -1242,32 +1260,41 @@ def build_fast_playback_command(video_path, cache_path, media_info):
 
 @app.route('/api/transcode/<path:filename>')
 def transcode_video(filename):
-    """트랜스코딩 스트리밍 (iOS 호환 - 캐시 기반)"""
+    """트랜스코딩 스트리밍 (iOS 호환 - 캐시 기반)
+
+    쿼리 ?silent=1 → 무소음 전체재생 전용. 오디오를 제거(-an)해 더 가볍게
+    인코딩하고, 별도의 silent_transcoded/ 캐시에 저장한다. 이 캐시는 마지막
+    사용(접근) 시각 기준으로 짧은 보존시간이 지나면 자동 정리된다.
+    """
     video_path = find_video_path(filename)
 
     if not video_path:
         return jsonify({'error': 'Video not found'}), 404
 
-    # 트랜스코딩된 파일 캐시 경로
-    cache_dir = os.path.join(os.path.dirname(__file__), 'static', 'transcoded')
+    silent = request.args.get('silent') in ('1', 'true', 'yes')
+
+    # 트랜스코딩된 파일 캐시 경로 (무소음 전용은 별도 디렉토리)
+    cache_subdir = 'silent_transcoded' if silent else 'transcoded'
+    cache_dir = os.path.join(os.path.dirname(__file__), 'static', cache_subdir)
     os.makedirs(cache_dir, exist_ok=True)
 
     # 캐시 파일명 생성 (원본 파일명 기반)
     name, ext = os.path.splitext(filename)
-    cache_filename = f"{name}_transcoded.mp4"
+    suffix = '_silent' if silent else '_transcoded'
+    cache_filename = f"{name}{suffix}.mp4"
     cache_path = os.path.join(cache_dir, cache_filename)
 
     # 캐시 파일이 없거나 원본보다 오래된 경우 트랜스코딩
     if not os.path.exists(cache_path) or os.path.getmtime(video_path) > os.path.getmtime(cache_path):
         # 코덱을 검사해 "가장 빠른" 방법 선택: 호환 스트림은 copy(리먹스), 비호환만 재인코딩
         media_info = get_media_info(video_path)
-        ffmpeg_cmd = build_fast_playback_command(video_path, cache_path, media_info)
+        ffmpeg_cmd = build_fast_playback_command(video_path, cache_path, media_info, silent=silent)
 
         try:
             subprocess.run(ffmpeg_cmd, capture_output=True, check=True, timeout=600)
         except subprocess.CalledProcessError as e:
             # copy(리먹스)가 실패하면 안전하게 전체 재인코딩으로 폴백
-            fallback_cmd = build_full_transcode_command(video_path, cache_path)
+            fallback_cmd = build_full_transcode_command(video_path, cache_path, silent=silent)
             if ffmpeg_cmd != fallback_cmd:
                 try:
                     subprocess.run(fallback_cmd, capture_output=True, check=True, timeout=600)
@@ -1285,6 +1312,13 @@ def transcode_video(filename):
                 }), 500
         except subprocess.TimeoutExpired:
             return jsonify({'error': 'Transcoding timeout'}), 500
+
+    # 마지막 사용 시각 갱신(atime)으로 미사용 자동삭제 기준을 정확히 유지.
+    # mtime은 보존해 원본 변경 감지(신선도 검사)가 깨지지 않도록 한다.
+    try:
+        os.utime(cache_path, (time.time(), os.path.getmtime(cache_path)))
+    except OSError:
+        pass
 
     # Range request 지원으로 캐시 파일 제공
     range_header = request.headers.get('Range', None)
@@ -1335,13 +1369,13 @@ def delete_video(filename):
 
         name, ext = os.path.splitext(filename)
 
-        # 트랜스코딩된 캐시 파일도 삭제
-        cache_dir = os.path.join(os.path.dirname(__file__), 'static', 'transcoded')
-        cache_filename = f"{name}_transcoded.mp4"
-        cache_path = os.path.join(cache_dir, cache_filename)
-
-        if os.path.exists(cache_path):
-            os.remove(cache_path)
+        # 트랜스코딩된 캐시 파일도 삭제 (일반/무소음 전용 모두)
+        for sub, suffix in (('transcoded', '_transcoded'), ('silent_transcoded', '_silent')):
+            cache_path = os.path.join(
+                os.path.dirname(__file__), 'static', sub, f"{name}{suffix}.mp4"
+            )
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
 
         # HLS 캐시 디렉토리도 삭제
         hls_dir = os.path.join(os.path.dirname(__file__), 'static', 'hls')
@@ -1547,21 +1581,34 @@ def cleanup_old_cache():
         max_age_days = settings['max_age_days']
         max_size_gb = settings['max_size_gb']
         thumbnail_retention_days = settings.get('thumbnail_retention_days', max_age_days)
+        silent_retention_hours = settings.get('silent_transcode_retention_hours', 24)
+
+        base_static = os.path.join(os.path.dirname(__file__), 'static')
+        silent_transcode_dir = os.path.join(base_static, 'silent_transcoded')
 
         cache_dirs = [
-            os.path.join(os.path.dirname(__file__), 'static', 'transcoded'),
-            os.path.join(os.path.dirname(__file__), 'static', 'hls'),
-            os.path.join(os.path.dirname(__file__), 'static', 'silent_videos')
+            os.path.join(base_static, 'transcoded'),
+            os.path.join(base_static, 'hls'),
+            os.path.join(base_static, 'silent_videos'),
+            silent_transcode_dir
         ]
 
         now = time.time()
         max_age_seconds = max_age_days * 24 * 60 * 60
+        silent_max_age_seconds = silent_retention_hours * 60 * 60
         deleted_count = 0
         freed_space = 0
 
         for cache_dir in cache_dirs:
             if not os.path.exists(cache_dir):
                 continue
+
+            # 무소음 트랜스코딩 캐시는 별도의 짧은 보존시간 적용
+            dir_max_age_seconds = (
+                silent_max_age_seconds
+                if cache_dir == silent_transcode_dir
+                else max_age_seconds
+            )
 
             # 오래된 파일 삭제 (접근 시간 기준)
             for item in os.listdir(cache_dir):
@@ -1572,7 +1619,7 @@ def cleanup_old_cache():
                     atime = os.path.getatime(item_path)
                     age_seconds = now - atime
 
-                    if age_seconds > max_age_seconds:
+                    if age_seconds > dir_max_age_seconds:
                         item_size = 0
                         if os.path.isdir(item_path):
                             item_size = get_directory_size(item_path)

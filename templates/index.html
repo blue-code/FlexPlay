@@ -3031,18 +3031,23 @@
             return (videos || []).find(v => v.name === filename) || null;
         }
 
-        // 무소음 전체재생 모드에서 코덱/컨테이너가 브라우저 비호환이면 자동 트랜스코딩 대상
+        // 무소음 전체재생 모드에서 코덱/컨테이너가 브라우저 비호환이면 자동 트랜스코딩 대상.
+        // 무소음은 오디오를 쓰지 않으므로 오디오 코덱은 무시(needs_transcode_silent)한다.
         function shouldAutoTranscode(filename) {
             if (!silentPlaylistEnabled) return false;
             const meta = videoMetaFor(filename);
-            return !!(meta && meta.needs_transcode);
+            return !!(meta && meta.needs_transcode_silent);
         }
 
         // 가장 빠른 재생 엔드포인트 결정
-        // - 수동 트랜스코딩 ON 또는 무소음 모드에서 비호환 코덱 → /api/transcode (호환 스트림은 copy로 리먹스, 비호환만 재인코딩)
+        // - 무소음 모드 비호환 코덱 → /api/transcode?silent=1 (오디오 제거, 별도 임시 캐시 + 미사용 자동삭제)
+        // - 수동 트랜스코딩 ON → /api/transcode (오디오 포함)
         // - 그 외 → 원본 /api/video
         function resolvePlaybackEndpoint(filename) {
-            if (transcodeEnabled || shouldAutoTranscode(filename)) {
+            if (shouldAutoTranscode(filename)) {
+                return `/api/transcode/${encodeURIComponent(filename)}?silent=1`;
+            }
+            if (transcodeEnabled) {
                 return `/api/transcode/${encodeURIComponent(filename)}`;
             }
             return `/api/video/${encodeURIComponent(filename)}`;
@@ -4363,10 +4368,10 @@
                     container.appendChild(img);
                 } else if (item.type === 'video') {
                     const fullPath = item.folder ? item.name : (browsePath ? `${browsePath}/${item.name}` : item.name);
-                    // 무소음 전체재생(뷰어 fallback)에서 비호환 코덱은 자동 트랜스코딩으로 재생
-                    const autoTranscodeViewer = viewerSilentFallbackActive && item.needs_transcode;
+                    // 무소음 전체재생(뷰어 fallback)에서 비호환 코덱은 자동 트랜스코딩으로 재생 (오디오 제거)
+                    const autoTranscodeViewer = viewerSilentFallbackActive && item.needs_transcode_silent;
                     const videoUrl = autoTranscodeViewer
-                        ? `/api/transcode/${encodeURIComponent(fullPath)}`
+                        ? `/api/transcode/${encodeURIComponent(fullPath)}?silent=1`
                         : `/api/video/${encodeURIComponent(fullPath)}`;
                     const video = document.createElement('video');
 
