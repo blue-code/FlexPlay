@@ -1577,6 +1577,9 @@
         .move-select, .browse-controls select, #bulkMoveTarget, #viewerMoveTarget {
             -webkit-appearance: none; appearance: none;
         }
+        /* 버튼 UA 기본 배경 제거(클래스 배경은 우선순위가 높아 유지됨).
+           배경 없는 커스텀 버튼이 흰색으로 렌더되는 것을 방지. */
+        button { background-color: transparent; }
         *::-webkit-scrollbar { width: 9px; height: 9px; }
         *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
         *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); background-clip: padding-box; }
@@ -1945,6 +1948,7 @@
         .rail-item {
             display: flex; align-items: center; gap: 13px; width: 100%;
             padding: 9px 11px; border-radius: var(--r);
+            background: transparent;   /* 버튼 UA 기본 배경(흰색) 제거 → 흰 글씨 가독성 확보 */
             border: 1px solid transparent; text-align: left;
             transition: .15s var(--ease); color: var(--text);
         }
