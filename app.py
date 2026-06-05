@@ -1560,8 +1560,8 @@ def move_video_to_target():
     })
 
 
-ORIENTATION_LANDSCAPE_DIR = '가로형 영상'
-ORIENTATION_PORTRAIT_DIR = '세로형 영상'
+ORIENTATION_LANDSCAPE_DIR = 'horizontal'
+ORIENTATION_PORTRAIT_DIR = 'vertical'
 
 
 @app.route('/api/organize-orientation', methods=['POST'])

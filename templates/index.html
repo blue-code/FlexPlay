@@ -2714,7 +2714,7 @@
         async function organizeOrientation() {
             if (currentFolder === 'all') return;
             const dirName = browsePath ? browsePath.split('/').pop() : browseFolder;
-            if (!confirm(`'${dirName}' 폴더의 영상을 방향별로 정리할까요?\n\n· 세로형 → '세로형 영상' 폴더\n· 가로형·정사각형 → '가로형 영상' 폴더\n\n폴더가 없으면 새로 만들고, 영상을 이동합니다.`)) return;
+            if (!confirm(`'${dirName}' 폴더의 영상을 방향별로 정리할까요?\n\n· 세로형 → 'vertical' 폴더\n· 가로형·정사각형 → 'horizontal' 폴더\n\n폴더가 없으면 새로 만들고, 영상을 이동합니다.`)) return;
 
             const btn = document.getElementById('organizeBtn');
             if (btn) btn.disabled = true;
