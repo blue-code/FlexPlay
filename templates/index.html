@@ -1908,6 +1908,170 @@
             transition: .15s var(--ease); flex: 0 0 auto; white-space: nowrap;
         }
         .toast .toast-undo:hover { background: rgba(246,183,60,.26); }
+
+        /* ============================================================
+           FOLDER-FIRST BROWSE LAYOUT (folder rail + actions + grid)
+           ============================================================ */
+        .container { max-width: 1280px; }
+        .browse {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        /* Folder rail */
+        .folder-rail {
+            background: var(--bg-1);
+            border: 1px solid var(--line);
+            border-radius: var(--r-lg);
+            box-shadow: var(--sh-3);
+            display: flex; flex-direction: column;
+            max-height: 82vh; min-height: 0;
+            overflow: hidden;
+        }
+        .rail-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 10px; }
+        .sec-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+        .rail-count { font-size: 12px; color: var(--text-3); font-weight: 600; }
+        .rail-scroll { flex: 1; overflow-y: auto; padding: 2px 10px 14px; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+        .rail-item {
+            display: flex; align-items: center; gap: 13px; width: 100%;
+            padding: 9px 11px; border-radius: var(--r);
+            border: 1px solid transparent; text-align: left;
+            transition: .15s var(--ease); color: var(--text);
+        }
+        .rail-item:hover { background: rgba(255,255,255,0.05); }
+        .rail-item.on { background: var(--accent-soft); border-color: var(--accent-line); }
+        .folder-cover {
+            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1.5px;
+            width: 46px; height: 46px; border-radius: 10px; overflow: hidden; flex: 0 0 auto; box-shadow: var(--sh-1);
+        }
+        .folder-cover i { display: block; background-size: cover; background-position: center; background-color: var(--bg-4); }
+        .folder-cover i.cover-empty { background: linear-gradient(135deg, #2a3342, #1b212c); }
+        .fi-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .fi-name { font-size: 14px; font-weight: 650; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rail-item.on .fi-name { color: var(--accent-2); }
+        .fi-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+        .fi-chev { color: var(--text-3); opacity: 0; transition: .15s var(--ease); display: inline-flex; flex: 0 0 auto; }
+        .rail-item:hover .fi-chev, .rail-item.on .fi-chev { opacity: 1; }
+
+        /* Content */
+        .browse-content {
+            background: var(--bg-1);
+            border: 1px solid var(--line);
+            border-radius: var(--r-lg);
+            box-shadow: var(--sh-3);
+            display: flex; flex-direction: column;
+            max-height: 82vh; min-height: 0;
+            overflow: hidden;
+        }
+        .folder-head { display: flex; align-items: flex-start; gap: 14px; padding: 18px 22px 4px; flex: 0 0 auto; }
+        .folder-head h1 {
+            font-size: 22px; font-weight: 780; letter-spacing: -.01em; margin: 0;
+            display: block; text-align: left; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .fh-sub { font-size: 13px; color: var(--text-3); margin-top: 5px; }
+        .folder-head .field.search { position: relative; display: flex; align-items: center; width: min(300px, 38vw); flex: 0 0 auto; }
+        .folder-head .field.search .fi-icon { position: absolute; left: 13px; color: var(--text-3); pointer-events: none; display: inline-flex; }
+        .folder-head .search-input { padding-left: 38px; height: 42px; }
+        .folder-head .clear-search-btn { position: absolute; right: 6px; height: 32px; padding: 0 10px; }
+
+        .big-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px 22px 14px; flex: 0 0 auto; }
+        .action-card {
+            display: flex; align-items: center; gap: 14px; padding: 15px 17px;
+            border-radius: var(--r); background: var(--bg-2); border: 1px solid var(--line-2);
+            transition: .16s var(--ease); text-align: left; cursor: pointer;
+        }
+        .action-card:hover { background: var(--bg-3); border-color: var(--line-3); transform: translateY(-1px); }
+        .action-card:active { transform: translateY(0); }
+        .action-card:disabled { opacity: .4; pointer-events: none; }
+        .action-card .ac-icon {
+            width: 46px; height: 46px; border-radius: 13px; flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.05); color: var(--text);
+        }
+        .action-card.primary { background: linear-gradient(135deg, rgba(246,183,60,.16), rgba(255,138,61,.10)); border-color: var(--accent-line); }
+        .action-card.primary:hover { background: linear-gradient(135deg, rgba(246,183,60,.24), rgba(255,138,61,.14)); }
+        .action-card.primary .ac-icon { background: var(--accent); color: var(--accent-ink); box-shadow: 0 6px 16px rgba(246,183,60,.3); }
+        .ac-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .ac-t { font-size: 15px; font-weight: 700; color: var(--text); }
+        .action-card.primary .ac-t { color: var(--accent-2); }
+        .ac-d { font-size: 12px; color: var(--text-3); }
+
+        /* Poster grid */
+        .grid-scroll { flex: 1; overflow-y: auto; padding: 6px 22px 24px; min-height: 0; }
+        .vgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .empty-grid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-3); padding: 64px 0; font-size: 14px; }
+        .vcard {
+            position: relative; border-radius: var(--r); overflow: hidden;
+            background: var(--bg-3); border: 1px solid var(--line); cursor: pointer;
+            transition: .18s var(--ease);
+        }
+        .vcard:hover { border-color: var(--line-2); transform: translateY(-2px); box-shadow: var(--sh-2); }
+        .vcard .poster { position: relative; aspect-ratio: 16/10; overflow: hidden; background: #0b0d12; display: flex; align-items: center; justify-content: center; }
+        .vcard .poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .vcard .poster .thumb-placeholder { color: var(--text-3); font-size: 12px; }
+        .vcard .poster .sheen { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,.55) 100%); pointer-events: none; }
+        .vcard .poster .dur { position: absolute; right: 7px; bottom: 7px; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: #fff; background: rgba(0,0,0,.66); padding: 2px 6px; border-radius: 5px; }
+        .vcard .poster .watched-tick { position: absolute; top: 7px; left: 7px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; box-shadow: var(--sh-1); }
+        .vcard .poster .play-ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: .2s var(--ease); }
+        .vcard:hover .poster .play-ov { opacity: 1; }
+        .vcard .poster .play-ov .pbtn { width: 46px; height: 46px; border-radius: 50%; background: rgba(246,183,60,.94); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; box-shadow: var(--sh-2); }
+        .vcard .vmeta { padding: 9px 11px 11px; }
+        .vcard .vname { font-size: 12.5px; font-weight: 650; line-height: 1.3; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+        .vcard .vsub { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--text-3); }
+        .vcard .vsub .dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .6; }
+        .vcard .card-del {
+            position: absolute; top: 8px; right: 8px; z-index: 3; width: 32px; height: 32px;
+            border-radius: 9px; display: flex; align-items: center; justify-content: center;
+            color: #fff; background: rgba(8,10,14,.62); border: 1px solid rgba(255,255,255,.16);
+            backdrop-filter: blur(4px); opacity: 0; transform: scale(.9); transition: .15s var(--ease);
+        }
+        .vcard:hover .card-del { opacity: 1; transform: scale(1); }
+        .vcard .card-del:hover { background: var(--bad); border-color: transparent; }
+        .vcard .card-del:active { transform: scale(.92); }
+
+        /* Advanced collapsible — keeps player/edit/tools alive (max-height collapse, not display:none) */
+        .advanced { border-top: 1px solid var(--line); flex: 0 0 auto; }
+        .advanced-head {
+            width: 100%; display: flex; align-items: center; gap: 9px;
+            padding: 13px 22px; font-size: 13px; font-weight: 650; color: var(--text-2);
+            background: transparent; transition: .15s var(--ease);
+        }
+        .advanced-head:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+        .advanced .adv-chev { display: inline-flex; transition: transform .2s var(--ease); color: var(--text-3); }
+        .advanced.open .adv-chev { transform: rotate(90deg); }
+        /* NOTE: collapse via max-height only (no opacity) — 무소음 재생은 이 안의
+           단일 플레이어를 position:fixed 전체화면으로 띄우는데, 조상에 opacity<1이
+           걸리면 fixed 자식까지 invisible 처리되어 오버레이가 안 보이기 때문. */
+        .advanced-body {
+            max-height: 0; overflow: hidden;
+            transition: max-height .35s var(--ease);
+            padding: 0 18px;
+        }
+        .advanced.open .advanced-body { max-height: 4000px; padding: 4px 18px 18px; }
+        .adv-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .advanced-body .player-container { background: transparent; border: none; box-shadow: none; padding: 0; }
+
+        /* Folder-first responsive: stack on narrow screens */
+        @media (max-width: 900px) {
+            .browse { grid-template-columns: 1fr; }
+            .folder-rail { max-height: none; }
+            .rail-scroll { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
+            .rail-item { flex: 0 0 auto; width: auto; min-width: 150px; }
+            .rail-item .fi-chev { display: none; }
+            .browse-content { max-height: none; }
+            .vgrid { grid-template-columns: repeat(3, 1fr); }
+            .grid-scroll { overflow-y: visible; }
+        }
+        @media (max-width: 640px) {
+            .folder-head { flex-direction: column; }
+            .folder-head .field.search { width: 100%; }
+            .big-actions { grid-template-columns: 1fr; }
+            .vgrid { grid-template-columns: repeat(2, 1fr); }
+            .vcard .card-del { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -1919,67 +2083,99 @@
             Flex<b>Play</b>
         </h1>
 
-        <div class="main-layout">
-            <!-- Video List -->
-            <div class="video-list-container">
-                <div class="video-list-header">
-                    <h2>영상 목록</h2>
-                    <div>
-                        <button class="refresh-btn" onclick="refreshVideoList()">새로고침</button>
-                        <button class="browse-mode-btn" id="browseModeBtn" onclick="toggleBrowseMode()">📁 폴더 탐색</button>
+        <div class="browse">
+            <!-- 폴더 레일 (단일 선택 네비게이션) -->
+            <aside class="folder-rail">
+                <div class="rail-head">
+                    <span class="sec-label">폴더</span>
+                    <span class="rail-count" id="railCount"></span>
+                </div>
+                <div id="folderRail" class="rail-scroll">
+                    <div class="loading" style="font-size: 0.9em;">로딩 중...</div>
+                </div>
+            </aside>
+
+            <!-- 콘텐츠: 폴더 헤더 + 액션 카드 + 포스터 그리드 -->
+            <section class="browse-content">
+                <div class="folder-head">
+                    <div style="min-width: 0; flex: 1;">
+                        <h1 id="folderHeadName">모든 영상</h1>
+                        <div class="fh-sub" id="folderHeadSub"></div>
                     </div>
-                </div>
-
-                <!-- 브라우징 모드 컨트롤 -->
-                <div class="browse-controls" id="browseControls" style="display: none;">
-                    <h3 style="font-size: 0.95em; margin-bottom: 8px;">📂 폴더 탐색 모드</h3>
-                    <select id="browseFolderSelect" onchange="onBrowseFolderChange()">
-                        <option value="">폴더를 선택하세요</option>
-                    </select>
-                    <div class="breadcrumb" id="breadcrumb"></div>
-                </div>
-
-                <!-- 폴더 필터 -->
-                <div class="folder-filter" id="folderFilter">
-                    <h3>📁 폴더 선택</h3>
-                    <div id="folderList" class="folder-list">
-                        <div class="loading" style="font-size: 0.9em;">로딩 중...</div>
-                    </div>
-                    <button class="select-all-btn" onclick="toggleAllFolders()">전체 선택/해제</button>
-                </div>
-
-                <div class="search-filter">
-                    <div class="search-row">
-                        <input type="text" id="searchInput" class="search-input" placeholder="파일명, 폴더, 코덱 검색" oninput="handleSearchInput(event)">
+                    <div class="field search">
+                        <span class="fi-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                        <input type="text" id="searchInput" class="search-input" placeholder="영상 검색" oninput="handleSearchInput(event)">
                         <button id="clearSearchBtn" class="clear-search-btn" onclick="clearSearch()" disabled>초기화</button>
                     </div>
-                    <div class="extension-filter">
-                        <span>🎯 확장자 필터</span>
-                        <div id="extensionChips" class="extension-chips">
-                            <p style="font-size: 0.8em; color: #777;">확장자 정보를 불러오는 중...</p>
+                </div>
+
+                <!-- 우선 기능 2가지: 무소음 전체재생 · 전체화면 뷰어 -->
+                <div class="big-actions">
+                    <button class="action-card primary" id="silentPlayAllBtn" onclick="playFolderSilent()">
+                        <span class="ac-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l4 6M21 9l-4 6"/></svg></span>
+                        <span class="ac-text">
+                            <span class="ac-t">무소음 전체재생</span>
+                            <span class="ac-d">폴더 전체를 음소거로 연속 재생</span>
+                        </span>
+                    </button>
+                    <button class="action-card" id="folderViewerBtn" onclick="startFullscreenViewerFromList()">
+                        <span class="ac-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4"/><path d="M20 9V5a1 1 0 0 0-1-1h-4"/><path d="M4 15v4a1 1 0 0 0 1 1h4"/><path d="M20 15v4a1 1 0 0 1-1 1h-4"/></svg></span>
+                        <span class="ac-text">
+                            <span class="ac-t">전체화면 뷰어</span>
+                            <span class="ac-d">스와이프로 넘기고 바로 삭제·이동</span>
+                        </span>
+                    </button>
+                </div>
+
+                <!-- 포스터 그리드 -->
+                <div class="grid-scroll">
+                    <div id="videoList" class="vgrid"><div class="loading">로딩 중...</div></div>
+                </div>
+
+                <!-- 고급 도구 (접이식): 재생기 · 구간편집 · 코덱 · 폴더탐색 · 일괄이동 · 히스토리 -->
+                <div class="advanced" id="advancedTools">
+                    <button class="advanced-head" type="button" onclick="toggleAdvanced()">
+                        <span class="adv-chev" id="advChev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+                        <span>고급 도구 — 재생기 · 구간 편집 · 코덱 · 폴더 탐색</span>
+                    </button>
+                    <div class="advanced-body" id="advancedBody">
+                        <div class="adv-toolbar">
+                            <button class="refresh-btn" onclick="refreshVideoList()">새로고침</button>
+                            <button class="browse-mode-btn" id="browseModeBtn" onclick="toggleBrowseMode()">📁 폴더 탐색</button>
                         </div>
-                    </div>
-                </div>
 
-                <div class="bulk-actions" id="bulkMoveBar">
-                    <div class="bulk-actions-left">
-                        <select class="move-select" id="bulkMoveTarget">
-                            <option value="">이동할 경로 선택</option>
-                        </select>
-                        <button class="move-btn" id="bulkMoveBtn" onclick="moveSelectedVideos()">선택 이동</button>
-                        <button class="select-all-btn" onclick="toggleSelectAllVisible()">목록 전체 선택/해제</button>
-                    </div>
-                    <div class="bulk-selection-info" id="bulkSelectionInfo">0개 선택됨</div>
-                </div>
+                        <!-- 브라우징 모드 컨트롤 -->
+                        <div class="browse-controls" id="browseControls" style="display: none;">
+                            <h3 style="font-size: 0.95em; margin-bottom: 8px;">📂 폴더 탐색 모드</h3>
+                            <select id="browseFolderSelect" onchange="onBrowseFolderChange()">
+                                <option value="">폴더를 선택하세요</option>
+                            </select>
+                            <div class="breadcrumb" id="breadcrumb"></div>
+                        </div>
 
-                <div id="videoList" class="loading">로딩 중...</div>
+                        <div class="extension-filter" style="margin: 8px 0 6px;">
+                            <span>🎯 확장자 필터</span>
+                            <div id="extensionChips" class="extension-chips">
+                                <p style="font-size: 0.8em; color: #777;">확장자 정보를 불러오는 중...</p>
+                            </div>
+                        </div>
 
-                <!-- History Section -->
-                <div class="history-section" id="historySection" style="display: none;">
-                    <h3>최근 재생</h3>
-                    <div id="historyList"></div>
-                </div>
-            </div>
+                        <div class="bulk-actions" id="bulkMoveBar">
+                            <div class="bulk-actions-left">
+                                <select class="move-select" id="bulkMoveTarget">
+                                    <option value="">이동할 경로 선택</option>
+                                </select>
+                                <button class="move-btn" id="bulkMoveBtn" onclick="moveSelectedVideos()">선택 이동</button>
+                                <button class="select-all-btn" onclick="toggleSelectAllVisible()">목록 전체 선택/해제</button>
+                            </div>
+                            <div class="bulk-selection-info" id="bulkSelectionInfo">0개 선택됨</div>
+                        </div>
+
+                        <!-- History Section -->
+                        <div class="history-section" id="historySection" style="display: none;">
+                            <h3>최근 재생</h3>
+                            <div id="historyList"></div>
+                        </div>
 
             <!-- Video Player -->
             <div class="player-container">
@@ -2064,9 +2260,12 @@
                     </ul>
                 </div>
 
-            </div>
-        </div>
-    </div>
+            </div><!-- /player-container -->
+                    </div><!-- /advanced-body -->
+                </div><!-- /advanced -->
+            </section><!-- /browse-content -->
+        </div><!-- /browse -->
+    </div><!-- /container -->
 
     <!-- 진행 상황 오버레이 -->
     <div class="progress-overlay" id="progressOverlay">
@@ -2226,6 +2425,116 @@
             clearTimeout(showToast._t);
         }
 
+        // ===== 폴더-우선 브라우즈 상태 + 헬퍼 =====
+        let currentFolder = 'all';          // 'all' | 폴더명 (단일 선택 네비게이션)
+        let currentGridVideos = [];         // 현재 그리드에 표시 중인(폴더 스코프) 영상들
+        let railFolderNames = ['all'];      // 레일 인덱스 → 폴더명 매핑
+
+        const SVG = {
+            chevR: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+            play:  '<svg width="20" height="20" viewBox="0 0 24 24"><path d="M6 4.5l13 7.5-13 7.5z" fill="currentColor"/></svg>',
+            check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 6.5"/></svg>',
+            trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/></svg>',
+            filmBig: '<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 15h18M8 4v16M16 4v16"/></svg>'
+        };
+
+        function formatDurationShort(s) {
+            s = Math.round(Number(s) || 0);
+            const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+            const pad = n => String(n).padStart(2, '0');
+            return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+        }
+
+        // 현재 폴더로 스코프된 영상 목록 (검색/확장자는 서버에서 이미 반영됨)
+        function getFolderScopedVideos() {
+            if (!Array.isArray(videos)) return [];
+            const list = currentFolder === 'all'
+                ? videos
+                : videos.filter(v => (v.folder || 'Unknown') === currentFolder);
+            return list.filter(v => !pendingDeletes.has(v.name));
+        }
+
+        function folderMetaFor(name) {
+            const vids = (name === 'all')
+                ? videos
+                : (videos || []).filter(v => (v.folder || 'Unknown') === name);
+            const total = vids.reduce((s, v) => s + (Number(v.duration) || 0), 0);
+            const covers = vids.filter(v => v.thumbnail_url).slice(0, 4).map(v => v.thumbnail_url);
+            return { count: vids.length, total, covers };
+        }
+
+        function railCover(covers) {
+            let cells = '';
+            for (let i = 0; i < 4; i++) {
+                const url = covers[i];
+                cells += url
+                    ? `<i style="background-image:url('${url.replace(/'/g, "%27")}')"></i>`
+                    : '<i class="cover-empty"></i>';
+            }
+            return `<span class="folder-cover">${cells}</span>`;
+        }
+
+        function renderFolderRail() {
+            const rail = document.getElementById('folderRail');
+            if (!rail) return;
+            const railCountEl = document.getElementById('railCount');
+            if (railCountEl) railCountEl.textContent = (folders ? folders.length : 0) + '개';
+
+            const items = [{ name: 'all', label: '모든 영상' }]
+                .concat((folders || []).map(f => ({ name: f.name, label: f.name })));
+            railFolderNames = items.map(it => it.name);
+
+            rail.innerHTML = items.map((it, idx) => {
+                const m = folderMetaFor(it.name);
+                const on = currentFolder === it.name;
+                return `
+                    <button class="rail-item ${on ? 'on' : ''}" onclick="selectFolder(${idx})">
+                        ${railCover(m.covers)}
+                        <span class="fi-meta">
+                            <span class="fi-name">${escapeHtml(it.label)}</span>
+                            <span class="fi-sub">${m.count}개 · ${formatDurationShort(m.total)}</span>
+                        </span>
+                        <span class="fi-chev">${SVG.chevR}</span>
+                    </button>`;
+            }).join('');
+        }
+
+        function selectFolder(idx) {
+            currentFolder = railFolderNames[idx] || 'all';
+            displayVideos(videos);
+            const gs = document.querySelector('.grid-scroll');
+            if (gs) gs.scrollTop = 0;
+        }
+
+        // 그리드 카드 클릭 → 현재 폴더 영상들로 전체화면 뷰어 열기
+        function openFolderViewer(idx) {
+            const list = currentGridVideos;
+            if (!list || list.length === 0) return;
+            try {
+                videoPlayer.pause();
+                const s = videoPlayer.querySelector('source');
+                if (s) s.src = '';
+                videoPlayer.load();
+            } catch (e) { /* 무시 */ }
+            viewerItems = list.map(v => ({ ...v, type: 'video' }));
+            viewerCurrentIndex = Math.max(0, Math.min(idx, viewerItems.length - 1));
+            browsePath = '';
+            browseFolder = '';
+            openFullscreenViewer();
+        }
+
+        // 무소음 전체재생 (현재 폴더 스코프)
+        function playFolderSilent() {
+            const list = getFolderScopedVideos();
+            if (!list.length) return;
+            startSilentPlaylist();
+        }
+
+        function toggleAdvanced() {
+            const a = document.getElementById('advancedTools');
+            if (a) a.classList.toggle('open');
+        }
+
         // 화면 자동 꺼짐 방지: iOS Safari는 비디오 재생 중 자동으로 화면 유지
         // 추가 속성 (playsinline, x5-playsinline, x-webkit-airplay 등)으로 강화
         let historyLoaded = false;
@@ -2344,8 +2653,10 @@
                     loadVideos();
                 }
             } catch (error) {
-                document.getElementById('folderList').innerHTML =
-                    '<div class="error" style="font-size: 0.85em;">폴더 목록을 불러오는데 실패했습니다.</div>';
+                const rail = document.getElementById('folderRail');
+                if (rail) {
+                    rail.innerHTML = '<div class="error" style="font-size: 0.85em;">폴더 목록을 불러오는데 실패했습니다.</div>';
+                }
                 console.error('Error loading folders:', error);
             }
         }
@@ -2357,23 +2668,12 @@
 
         // 폴더 목록 표시
         function displayFolders() {
-            const container = document.getElementById('folderList');
-
-            if (folders.length === 0) {
-                container.innerHTML = '<p style="color: #999; font-size: 0.85em;">설정된 폴더가 없습니다.</p>';
-                return;
+            // 폴더-우선 UI에서는 체크박스 대신 단일 선택 폴더 레일을 렌더한다.
+            // 선택한 폴더가 더 이상 없으면 '모든 영상'으로 폴백.
+            if (currentFolder !== 'all' && !(folders || []).some(f => f.name === currentFolder)) {
+                currentFolder = 'all';
             }
-
-            container.innerHTML = folders.map(folder => `
-                <div class="folder-checkbox">
-                    <input type="checkbox"
-                           id="folder_${folder.name}"
-                           ${selectedFolders.has(folder.name) ? 'checked' : ''}
-                           onchange="toggleFolder('${folder.name}')">
-                    <label for="folder_${folder.name}">${folder.name}</label>
-                    <span class="folder-count">${folder.count}</span>
-                </div>
-            `).join('');
+            renderFolderRail();
         }
 
         // 폴더 선택/해제
@@ -2750,24 +3050,38 @@
                 }
 
         // 영상 목록 표시
+        // 폴더-우선 포스터 그리드. 인자로 받은 videoList(서버가 검색/확장자 반영)는
+        // `videos` 전체이며, 여기서 현재 폴더로 스코프해 카드를 렌더한다.
         function displayVideos(videoList) {
             const container = document.getElementById('videoList');
+            if (!container) return;
+            container.classList.add('vgrid'); // 목록 모드는 포스터 그리드
+
+            // 폴더 레일(커버·개수)도 함께 갱신
+            renderFolderRail();
+
+            // 현재 폴더 스코프 + 보류 삭제 숨김
+            let scoped = getFolderScopedVideos();
+            currentGridVideos = scoped;
+
+            // 폴더 헤더 + 액션 카드 활성화 상태
+            const headName = document.getElementById('folderHeadName');
+            const headSub = document.getElementById('folderHeadSub');
+            if (headName) headName.textContent = currentFolder === 'all' ? '모든 영상' : currentFolder;
+            const totalDur = scoped.reduce((s, v) => s + (Number(v.duration) || 0), 0);
+            if (headSub) headSub.textContent = `${scoped.length}개 영상 · 총 ${formatDurationShort(totalDur)}`;
+            const silentBtn = document.getElementById('silentPlayAllBtn');
+            const viewerBtn = document.getElementById('folderViewerBtn');
+            if (silentBtn) silentBtn.disabled = scoped.length === 0;
+            if (viewerBtn) viewerBtn.disabled = scoped.length === 0;
+
             const hasFilter = searchTerm.trim().length > 0 || selectedExtensions.size > 0;
-
-            // 토스트 동안 보류 중인 삭제 항목은 목록에서 숨김 (실행취소 시 자연 복원)
-            if (pendingDeletes.size > 0 && Array.isArray(videoList)) {
-                videoList = videoList.filter(v => !pendingDeletes.has(v.name));
-            }
-
-            if (!videoList || videoList.length === 0) {
-                container.innerHTML = hasFilter
-                    ? '<div class="no-video">검색/필터 조건과 일치하는 영상이 없습니다.</div>'
-                    : '<div class="no-video">영상 파일이 없습니다.<br>videos 폴더에 영상을 추가해주세요.</div>';
+            if (scoped.length === 0) {
+                container.innerHTML = `<div class="empty-grid">${SVG.filmBig}<div>${hasFilter ? '검색 결과가 없어요' : '이 폴더가 비어 있어요'}</div></div>`;
                 return;
             }
 
-            container.innerHTML = videoList.map(video => {
-                const bitrateText = formatBitrate(video.bitrate);
+            container.innerHTML = scoped.map((video, idx) => {
                 const encodedName = encodeURIComponent(video.name);
                 const thumbnailVersion = video.modified ? encodeURIComponent(video.modified) : '';
                 const hasThumbnail = Boolean(video.thumbnail_url);
@@ -2775,70 +3089,28 @@
                     ? `${video.thumbnail_url.includes('?') ? '&' : '?'}v=${thumbnailVersion}`
                     : '';
                 const thumbContent = hasThumbnail
-                    ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="${escapeHtml(video.name)} 썸네일" loading="lazy" onload="setThumbOrientation(this)">`
+                    ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="" loading="lazy">`
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
-                const durationSec = Number(video.duration || 0);
-                const watchedPos = video.resume_position != null
-                    ? Number(video.resume_position)
-                    : (playbackHistory instanceof Map ? playbackHistory.get(video.name) : undefined);
-                let statusBadge = '';
-                if (video.watched) {
-                    statusBadge = '<span class="watched-badge">👁️ 시청 완료</span>';
-                } else if (watchedPos && watchedPos >= HISTORY_MIN_POSITION) {
-                    statusBadge = '<span class="watching-badge">▶️ 시청 중</span>';
-                }
-                const isActive = currentVideo === video.name;
-                const isSelected = selectedVideoNames.has(video.name);
-                const extensionLabel = video.extension ? video.extension.replace('.', '').toUpperCase() : '';
+                const durText = video.duration ? formatDurationShort(video.duration) : '';
+                const watched = video.watched
+                    ? `<span class="watched-tick">${SVG.check}</span>` : '';
 
                 return `
-                    <div class="video-item ${isActive ? 'active' : ''}"
-                         data-filename="${encodedName}"
-                         onclick="playVideo(decodeURIComponent('${encodedName}'), event)">
-                        <div class="video-select" onclick="event.stopPropagation()">
-                            <input type="checkbox"
-                                   ${isSelected ? 'checked' : ''}
-                                   aria-label="영상 선택"
-                                   onchange="toggleVideoSelection('${encodedName}', event)">
+                    <div class="vcard" data-filename="${encodedName}" onclick="openFolderViewer(${idx})">
+                        <button class="card-del" title="삭제"
+                                onclick="event.stopPropagation(); deleteVideo(decodeURIComponent('${encodedName}'), event)">${SVG.trash}</button>
+                        <div class="poster">
+                            ${thumbContent}
+                            <div class="sheen"></div>
+                            ${watched}
+                            ${durText ? `<div class="dur">${durText}</div>` : ''}
+                            <div class="play-ov"><span class="pbtn">${SVG.play}</span></div>
                         </div>
-                        <div class="thumb-stack">
-                            <div class="video-thumb">${thumbContent}</div>
-                            <div class="thumb-caption">
-                                ${extensionLabel ? `<span class="thumb-chip">${extensionLabel}</span>` : ''}
-                                ${bitrateText ? `<span class="thumb-chip">${bitrateText}</span>` : ''}
-                                ${video.video_codec_info ? `<span class="thumb-chip">🎞 ${escapeHtml(video.video_codec_info)}</span>` : ''}
-                            </div>
-                        </div>
-                        <div class="video-meta">
-                            <div class="video-item-header meta-top">
-                                <div>
-                                    <div class="video-item-name">${escapeHtml(video.name)}</div>
-                                    <div class="meta-subline">
-                                        ${extensionLabel ? `<span class="info-chip"><span class="label">확장</span>${extensionLabel}</span>` : ''}
-                                        ${bitrateText ? `<span class="info-chip"><span class="label">비트</span>${bitrateText}</span>` : ''}
-                                    </div>
-                                </div>
-                                ${statusBadge}
-                            </div>
-                            <div class="meta-subline">
-                                <span class="info-chip"><span class="label">폴더</span>${escapeHtml(video.folder || 'Unknown')}</span>
-                                <span class="info-chip"><span class="label">크기</span>${formatFileSize(video.size)}</span>
-                                <span class="info-chip"><span class="label">수정</span>${formatDate(video.modified)}</span>
-                            </div>
-                            <div class="meta-subline">
-                                ${video.video_codec_info ? `<span class="codec-chip">🎞 ${escapeHtml(video.video_codec_info)}</span>` : ''}
-                                ${video.audio_codec_info ? `<span class="codec-chip">🔊 ${escapeHtml(video.audio_codec_info)}</span>` : ''}
-                            </div>
-                            <div class="video-actions-row">
-                                <div class="meta-subline">
-                                    ${silentPlaylistEnabled && isActive ? '<span class="info-chip">🔇 무소음</span>' : ''}
-                                    ${hlsEnabled && isActive ? '<span class="info-chip">📡 HLS</span>' : ''}
-                                    ${transcodeEnabled && isActive ? '<span class="info-chip">📱 트랜스코딩</span>' : ''}
-                                </div>
-                                <div class="action-buttons">
-                                    <button class="move-btn-item" onclick="moveVideo(decodeURIComponent('${encodedName}'), event)">이동</button>
-                                    <button class="delete-btn" onclick="deleteVideo(decodeURIComponent('${encodedName}'), event)">삭제</button>
-                                </div>
+                        <div class="vmeta">
+                            <div class="vname">${escapeHtml(video.name)}</div>
+                            <div class="vsub">
+                                ${durText ? `<span>${durText}</span><span class="dot"></span>` : ''}
+                                <span>${formatFileSize(video.size)}</span>
                             </div>
                         </div>
                     </div>
@@ -2866,6 +3138,10 @@
 
         // 영상 재생
         async function playVideo(filename, evt) {
+            // 단일 플레이어는 '고급 도구' 안에 있으므로, 직접 재생 시 자동으로 펼쳐 보이게 한다.
+            const adv = document.getElementById('advancedTools');
+            if (adv) adv.classList.add('open');
+
             if (historySaveHandle) {
                 clearTimeout(historySaveHandle);
                 historySaveHandle = null;
@@ -3011,7 +3287,7 @@
             if (event) event.stopPropagation();
             if (pendingDeletes.has(filename)) return;
 
-            const el = document.querySelector(`.video-item[data-filename="${encodeURIComponent(filename)}"]`);
+            const el = document.querySelector(`[data-filename="${encodeURIComponent(filename)}"]`);
             if (el) el.style.display = 'none';
 
             const timer = setTimeout(() => {
@@ -3892,12 +4168,17 @@
         async function startSilentPlaylist() {
             console.log('[Silent Playlist] 시작 요청');
 
-            if (!videos || videos.length === 0) {
+            // 현재 선택한 폴더로 스코프 (없으면 전체)
+            const scopedVideos = (typeof getFolderScopedVideos === 'function')
+                ? getFolderScopedVideos()
+                : (videos || []);
+
+            if (!scopedVideos || scopedVideos.length === 0) {
                 alert('재생할 영상이 없습니다. 폴더를 선택하거나 영상을 추가해주세요.');
                 return;
             }
 
-            silentPlaylist = videos.map(v => v.name);
+            silentPlaylist = scopedVideos.map(v => v.name);
             console.log('[Silent Playlist] 재생 목록 생성:', silentPlaylist.length, '개');
 
             if (silentPlaylist.length === 0) {
@@ -4443,13 +4724,13 @@
             isBrowseMode = !isBrowseMode;
             const btn = document.getElementById('browseModeBtn');
             const browseControls = document.getElementById('browseControls');
-            const folderFilter = document.getElementById('folderFilter');
+            const folderFilter = document.getElementById('folderFilter'); // 폴더-우선 UI에선 없음(레일이 대체)
 
             if (isBrowseMode) {
                 btn.textContent = '📋 목록 모드';
                 btn.classList.add('active');
                 browseControls.style.display = 'block';
-                folderFilter.style.display = 'none';
+                if (folderFilter) folderFilter.style.display = 'none';
 
                 // 폴더 목록을 select에 추가
                 const select = document.getElementById('browseFolderSelect');
@@ -4461,13 +4742,15 @@
                     select.appendChild(option);
                 });
 
-                // 영상 목록 숨기기
-                document.getElementById('videoList').innerHTML = '<div class="no-video">폴더를 선택하여 탐색을 시작하세요.</div>';
+                // 폴더 탐색 모드는 세로 리스트로 표시 (그리드 해제)
+                const vl = document.getElementById('videoList');
+                vl.classList.remove('vgrid');
+                vl.innerHTML = '<div class="no-video">폴더를 선택하여 탐색을 시작하세요.</div>';
             } else {
                 btn.textContent = '📁 폴더 탐색';
                 btn.classList.remove('active');
                 browseControls.style.display = 'none';
-                folderFilter.style.display = 'block';
+                if (folderFilter) folderFilter.style.display = 'block';
 
                 // 원래 목록으로 되돌리기
                 loadVideos();
@@ -4540,6 +4823,7 @@
 
         function displayBrowseItems(items) {
             const container = document.getElementById('videoList');
+            container.classList.remove('vgrid'); // 탐색 모드는 세로 리스트
 
             if (!items || items.length === 0) {
                 container.innerHTML = '<div class="no-video">이 폴더는 비어있습니다.</div>';
@@ -5199,7 +5483,10 @@
 
         // 폴더 선택 모드에서 전체 화면 뷰어 시작
         async function startFullscreenViewerFromList() {
-            if (!videos || videos.length === 0) {
+            const scopedVideos = (typeof getFolderScopedVideos === 'function')
+                ? getFolderScopedVideos()
+                : (videos || []);
+            if (!scopedVideos || scopedVideos.length === 0) {
                 alert('영상이 없습니다.');
                 return;
             }
@@ -5232,8 +5519,8 @@
                 videoPlayer.load();
             }
 
-            // videos 배열을 viewerItems로 복사 (folder 정보 포함)
-            viewerItems = videos.map(v => ({
+            // 현재 폴더 스코프 영상들을 viewerItems로 복사 (folder 정보 포함)
+            viewerItems = scopedVideos.map(v => ({
                 ...v,
                 type: 'video'
             }));
