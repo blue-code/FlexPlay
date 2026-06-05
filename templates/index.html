@@ -1972,6 +1972,27 @@
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .fh-sub { font-size: 13px; color: var(--text-3); margin-top: 5px; }
+        .folder-back {
+            width: 38px; height: 38px; border-radius: var(--r-sm); flex: 0 0 auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: var(--text-2); background: rgba(255,255,255,0.05);
+            border: 1px solid var(--line-2); transition: .15s var(--ease); margin-top: 2px;
+        }
+        .folder-back:hover { background: var(--bg-4); color: var(--text); border-color: var(--line-3); }
+        .fh-sub .crumbs { display: inline; }
+        .fh-sub .crumb { color: var(--accent-2); cursor: pointer; }
+        .fh-sub .crumb:hover { text-decoration: underline; color: var(--accent); }
+        .fh-sub .crumb-sep { margin: 0 5px; color: var(--text-3); }
+
+        /* Folder / image cards in the grid */
+        .vcard.folder-card .poster, .vcard .poster.folder-poster {
+            background: linear-gradient(150deg, #232c3a, #161c26);
+        }
+        .vcard .folder-glyph {
+            display: flex; align-items: center; justify-content: center;
+            width: 100%; height: 100%; color: var(--accent-2); opacity: .85;
+        }
+        .vcard.folder-card:hover .folder-glyph { opacity: 1; }
         .folder-head .field.search { position: relative; display: flex; align-items: center; width: min(300px, 38vw); flex: 0 0 auto; }
         .folder-head .field.search .fi-icon { position: absolute; left: 13px; color: var(--text-3); pointer-events: none; display: inline-flex; }
         .folder-head .search-input { padding-left: 38px; height: 42px; }
@@ -2098,6 +2119,9 @@
             <!-- 콘텐츠: 폴더 헤더 + 액션 카드 + 포스터 그리드 -->
             <section class="browse-content">
                 <div class="folder-head">
+                    <button class="folder-back" id="folderBackBtn" type="button" onclick="folderGoUp()" title="상위 폴더" style="display:none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+                    </button>
                     <div style="min-width: 0; flex: 1;">
                         <h1 id="folderHeadName">모든 영상</h1>
                         <div class="fh-sub" id="folderHeadSub"></div>
@@ -2435,8 +2459,11 @@
             play:  '<svg width="20" height="20" viewBox="0 0 24 24"><path d="M6 4.5l13 7.5-13 7.5z" fill="currentColor"/></svg>',
             check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 6.5"/></svg>',
             trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/></svg>',
-            filmBig: '<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 15h18M8 4v16M16 4v16"/></svg>'
+            filmBig: '<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 15h18M8 4v16M16 4v16"/></svg>',
+            folder: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+            image: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M5 19l5-5 4 4 2-2 3 3"/></svg>'
         };
+        let crumbTargets = [];   // 브레드크럼 인덱스 → browsePath
 
         function formatDurationShort(s) {
             s = Math.round(Number(s) || 0);
@@ -2501,9 +2528,183 @@
 
         function selectFolder(idx) {
             currentFolder = railFolderNames[idx] || 'all';
-            displayVideos(videos);
+            if (searchTerm) { searchTerm = ''; const si = document.getElementById('searchInput'); if (si) si.value = ''; const cb = document.getElementById('clearSearchBtn'); if (cb) cb.disabled = true; }
+            renderFolderRail();
+            if (currentFolder === 'all') {
+                browseFolder = ''; browsePath = '';
+                loadVideos({ skipLoader: true });   // 평면 목록(전체)
+            } else {
+                browseFolder = currentFolder; browsePath = '';
+                loadFolderBrowse();                 // 폴더 계층 탐색
+            }
             const gs = document.querySelector('.grid-scroll');
             if (gs) gs.scrollTop = 0;
+        }
+
+        // ── 폴더 계층 탐색 (하위/상위 이동) ─────────────────────────────
+        async function loadFolderBrowse() {
+            const container = document.getElementById('videoList');
+            if (!container) return;
+            container.classList.add('vgrid');
+            container.innerHTML = '<div class="loading">로딩 중...</div>';
+            try {
+                const params = new URLSearchParams({ folder: browseFolder, path: browsePath });
+                const response = await fetch(`/api/browse?${params.toString()}`);
+                if (!response.ok) throw new Error('폴더를 불러오는데 실패했습니다.');
+                const data = await response.json();
+                browseItems = (data.items || []).map((it, i) => ({ ...it, _idx: i }));
+                renderFolderHead();
+                renderFolderBrowseGrid(browseItems);
+            } catch (error) {
+                container.innerHTML = '<div class="error">폴더를 불러오는데 실패했습니다.</div>';
+                console.error('Error loading folder browse:', error);
+            }
+        }
+
+        function renderFolderHead() {
+            const headName = document.getElementById('folderHeadName');
+            const headSub = document.getElementById('folderHeadSub');
+            const back = document.getElementById('folderBackBtn');
+            const parts = (browsePath || '').split('/').filter(Boolean);
+            crumbTargets = [''].concat(parts.map((_, k) => parts.slice(0, k + 1).join('/')));
+
+            if (headName) headName.textContent = parts.length ? parts[parts.length - 1] : browseFolder;
+
+            let crumb = `<span class="crumb" onclick="folderGoAll()">모든 영상</span>`;
+            crumb += `<span class="crumb-sep">/</span><span class="crumb" onclick="folderCrumb(0)">${escapeHtml(browseFolder)}</span>`;
+            parts.forEach((p, k) => {
+                crumb += `<span class="crumb-sep">/</span><span class="crumb" onclick="folderCrumb(${k + 1})">${escapeHtml(p)}</span>`;
+            });
+            const foldersN = browseItems.filter(i => i.type === 'folder').length;
+            const videosN = browseItems.filter(i => i.type === 'video').length;
+            if (headSub) headSub.innerHTML = `<span class="crumbs">${crumb}</span> · ${foldersN}개 폴더 · ${videosN}개 영상`;
+            if (back) back.style.display = '';
+
+            const mediaN = browseItems.filter(i => i.type === 'video' || i.type === 'image').length;
+            const silentBtn = document.getElementById('silentPlayAllBtn');
+            const viewerBtn = document.getElementById('folderViewerBtn');
+            if (silentBtn) silentBtn.disabled = videosN === 0;
+            if (viewerBtn) viewerBtn.disabled = mediaN === 0;
+        }
+
+        function renderFolderBrowseGrid(list) {
+            const container = document.getElementById('videoList');
+            if (!container) return;
+            container.classList.add('vgrid');
+            if (!list || list.length === 0) {
+                container.innerHTML = `<div class="empty-grid">${SVG.filmBig}<div>이 폴더가 비어 있어요</div></div>`;
+                return;
+            }
+            container.innerHTML = list.map(item => {
+                const i = item._idx;
+                if (item.type === 'folder') {
+                    return `
+                        <div class="vcard folder-card" onclick="enterSubFolderByIdx(${i})">
+                            <button class="card-del" title="폴더 삭제" onclick="event.stopPropagation(); deleteBrowseFolderByIdx(${i})">${SVG.trash}</button>
+                            <div class="poster folder-poster"><span class="folder-glyph">${SVG.folder}</span></div>
+                            <div class="vmeta"><div class="vname">${escapeHtml(item.name)}</div><div class="vsub"><span>폴더</span></div></div>
+                        </div>`;
+                }
+                if (item.type === 'video') {
+                    const hasThumb = Boolean(item.thumbnail_url);
+                    const ver = hasThumb && item.modified ? `${item.thumbnail_url.includes('?') ? '&' : '?'}v=${encodeURIComponent(item.modified)}` : '';
+                    const thumb = hasThumb
+                        ? `<img src="${item.thumbnail_url}${ver}" alt="" loading="lazy">`
+                        : `<div class="thumb-placeholder">${item.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
+                    const dur = item.duration ? formatDurationShort(item.duration) : '';
+                    return `
+                        <div class="vcard" onclick="openBrowseMediaByIdx(${i})">
+                            <div class="poster">
+                                ${thumb}
+                                <div class="sheen"></div>
+                                ${dur ? `<div class="dur">${dur}</div>` : ''}
+                                <div class="play-ov"><span class="pbtn">${SVG.play}</span></div>
+                            </div>
+                            <div class="vmeta">
+                                <div class="vname">${escapeHtml(item.name)}</div>
+                                <div class="vsub">${dur ? `<span>${dur}</span><span class="dot"></span>` : ''}<span>${formatFileSize(item.size)}</span></div>
+                            </div>
+                        </div>`;
+                }
+                if (item.type === 'image') {
+                    return `
+                        <div class="vcard" onclick="openBrowseMediaByIdx(${i})">
+                            <div class="poster folder-poster"><span class="folder-glyph">${SVG.image}</span><div class="sheen"></div></div>
+                            <div class="vmeta"><div class="vname">${escapeHtml(item.name)}</div><div class="vsub"><span>이미지</span></div></div>
+                        </div>`;
+                }
+                return '';
+            }).join('');
+        }
+
+        function enterSubFolderByIdx(i) {
+            const it = browseItems[i];
+            if (!it || it.type !== 'folder') return;
+            browsePath = browsePath ? `${browsePath}/${it.name}` : it.name;
+            const gs = document.querySelector('.grid-scroll'); if (gs) gs.scrollTop = 0;
+            loadFolderBrowse();
+        }
+
+        function deleteBrowseFolderByIdx(i) {
+            const it = browseItems[i];
+            if (!it) return;
+            deleteBrowseFolder(it.name, { stopPropagation() {}, preventDefault() {} });
+        }
+
+        function openBrowseMediaByIdx(i) {
+            const it = browseItems[i];
+            if (!it) return;
+            const media = browseItems.filter(x => x.type === 'video' || x.type === 'image');
+            try { videoPlayer.pause(); const s = videoPlayer.querySelector('source'); if (s) s.src = ''; videoPlayer.load(); } catch (e) {}
+            viewerItems = media.map(x => ({ ...x }));
+            viewerCurrentIndex = Math.max(0, media.findIndex(x => x._idx === it._idx));
+            openFullscreenViewer();   // browseFolder/browsePath 유지 → 뷰어가 경로 해석
+        }
+
+        function folderGoUp() {
+            if (currentFolder === 'all') return;
+            if (!browsePath) { folderGoAll(); return; }
+            const parts = browsePath.split('/').filter(Boolean);
+            parts.pop();
+            browsePath = parts.join('/');
+            loadFolderBrowse();
+        }
+
+        function folderGoAll() {
+            currentFolder = 'all';
+            browseFolder = ''; browsePath = '';
+            const back = document.getElementById('folderBackBtn'); if (back) back.style.display = 'none';
+            renderFolderRail();
+            loadVideos({ skipLoader: true });
+        }
+
+        function folderCrumb(j) {
+            browsePath = crumbTargets[j] || '';
+            loadFolderBrowse();
+        }
+
+        // 현재 위치(전체/폴더) 기준 미디어 헬퍼
+        function getCurrentDirVideos() {
+            if (currentFolder === 'all') return getFolderScopedVideos();
+            return (browseItems || []).filter(i => i.type === 'video');
+        }
+        function getCurrentDirMedia() {
+            if (currentFolder === 'all') return getFolderScopedVideos();
+            return (browseItems || []).filter(i => i.type === 'video' || i.type === 'image');
+        }
+
+        // 뷰어 기반 무소음 연속재생 (폴더/하위폴더용)
+        async function openViewerSilent(vids, startIndex = 0) {
+            if (!vids || !vids.length) return;
+            if (typeof rememberAudioState === 'function') rememberAudioState();
+            silentPlaylistEnabled = true;
+            viewerSilentFallbackActive = true;
+            lastProgressCheckTime = 0;
+            updateSilentPlaylistButton();
+            viewerItems = vids.map(v => ({ ...v, type: 'video' }));
+            viewerCurrentIndex = Math.max(0, Math.min(startIndex, viewerItems.length - 1));
+            silentPlaylistIndex = viewerCurrentIndex;
+            await openFullscreenViewer();   // browseFolder/browsePath 유지
         }
 
         // 그리드 카드 클릭 → 현재 폴더 영상들로 전체화면 뷰어 열기
@@ -2523,11 +2724,16 @@
             openFullscreenViewer();
         }
 
-        // 무소음 전체재생 (현재 폴더 스코프)
+        // 무소음 전체재생 (현재 위치 스코프)
         function playFolderSilent() {
-            const list = getFolderScopedVideos();
-            if (!list.length) return;
-            startSilentPlaylist();
+            if (currentFolder === 'all') {
+                if (!getFolderScopedVideos().length) return;
+                startSilentPlaylist();          // 메인 플레이어 무소음 (평면)
+            } else {
+                const vids = getCurrentDirVideos();
+                if (!vids.length) return;
+                openViewerSilent(vids, 0);      // 현재 폴더의 영상들을 뷰어로 무소음 연속재생
+            }
         }
 
         function toggleAdvanced() {
@@ -2663,7 +2869,11 @@
 
         async function refreshVideoList() {
             await loadFolders({ preserveSelection: true, skipVideos: true });
-            await loadVideos();
+            if (currentFolder !== 'all') {
+                await loadFolderBrowse();
+            } else {
+                await loadVideos();
+            }
         }
 
         // 폴더 목록 표시
@@ -2730,10 +2940,14 @@
                     throw new Error(result.error || '폴더 삭제에 실패했습니다.');
                 }
 
-                // 삭제 성공 시 현재 디렉토리 다시 로드
-                await loadBrowseDirectory();
+                // 삭제 성공 시 현재 디렉토리 다시 로드 (폴더-우선 그리드 또는 레거시 리스트)
+                if (currentFolder !== 'all') {
+                    await loadFolderBrowse();
+                } else {
+                    await loadBrowseDirectory();
+                }
 
-                alert(`"${folderName}" 폴더가 삭제되었습니다.`);
+                showToast(`"${folderName}" 폴더 삭제됨`, 'delete');
             } catch (error) {
                 alert('폴더 삭제 중 오류가 발생했습니다: ' + error.message);
                 console.error('Browse folder delete error:', error);
@@ -2811,6 +3025,14 @@
                 clearBtn.disabled = searchTerm.trim().length === 0;
             }
 
+            // 폴더 계층 탐색 중에는 현재 폴더 내용에서 즉시(클라이언트) 필터링
+            if (currentFolder !== 'all') {
+                const q = searchTerm.trim().toLowerCase();
+                const list = q ? browseItems.filter(it => (it.name || '').toLowerCase().includes(q)) : browseItems;
+                renderFolderBrowseGrid(list);
+                return;
+            }
+
             if (searchDebounce) {
                 clearTimeout(searchDebounce);
             }
@@ -2827,7 +3049,11 @@
             if (clearBtn) {
                 clearBtn.disabled = true;
             }
-            loadVideos();
+            if (currentFolder !== 'all') {
+                renderFolderBrowseGrid(browseItems);
+            } else {
+                loadVideos();
+            }
         }
 
         function renderExtensionChips(extensionList) {
@@ -3064,10 +3290,12 @@
             let scoped = getFolderScopedVideos();
             currentGridVideos = scoped;
 
-            // 폴더 헤더 + 액션 카드 활성화 상태
+            // 폴더 헤더 + 액션 카드 활성화 상태 (평면 '모든 영상' 모드)
+            const back = document.getElementById('folderBackBtn');
+            if (back) back.style.display = 'none';
             const headName = document.getElementById('folderHeadName');
             const headSub = document.getElementById('folderHeadSub');
-            if (headName) headName.textContent = currentFolder === 'all' ? '모든 영상' : currentFolder;
+            if (headName) headName.textContent = '모든 영상';
             const totalDur = scoped.reduce((s, v) => s + (Number(v.duration) || 0), 0);
             if (headSub) headSub.textContent = `${scoped.length}개 영상 · 총 ${formatDurationShort(totalDur)}`;
             const silentBtn = document.getElementById('silentPlayAllBtn');
@@ -5217,7 +5445,9 @@
                     if (viewerItems.length === 0) {
                         // 더 이상 아이템이 없으면 닫기
                         closeFullscreenViewer();
-                        if (isBrowseMode) {
+                        if (currentFolder !== 'all') {
+                            loadFolderBrowse();
+                        } else if (isBrowseMode) {
                             loadBrowseDirectory();
                         } else {
                             loadVideos();
@@ -5279,7 +5509,9 @@
                     if (viewerItems.length === 0) {
                         // 더 이상 아이템이 없으면 닫기
                         closeFullscreenViewer();
-                        if (isBrowseMode) {
+                        if (currentFolder !== 'all') {
+                            loadFolderBrowse();
+                        } else if (isBrowseMode) {
                             loadBrowseDirectory();
                         } else {
                             loadVideos();
@@ -5483,6 +5715,18 @@
 
         // 폴더 선택 모드에서 전체 화면 뷰어 시작
         async function startFullscreenViewerFromList() {
+            // 폴더 계층 탐색 중이면 현재 폴더의 미디어로 뷰어 오픈 (경로 유지)
+            if (currentFolder !== 'all') {
+                const media = getCurrentDirMedia();
+                if (!media.length) { alert('영상이 없습니다.'); return; }
+                try { videoPlayer.pause(); const s = videoPlayer.querySelector('source'); if (s) s.src = ''; videoPlayer.load(); } catch (e) {}
+                viewerItems = media.map(v => ({ ...v }));
+                viewerCurrentIndex = 0;
+                await new Promise(r => setTimeout(r, 200));
+                openFullscreenViewer();
+                return;
+            }
+
             const scopedVideos = (typeof getFolderScopedVideos === 'function')
                 ? getFolderScopedVideos()
                 : (videos || []);
