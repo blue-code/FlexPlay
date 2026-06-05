@@ -1560,6 +1560,9 @@
             --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
         }
 
+        /* 네이티브 컨트롤(select/input/스크롤바)이 흰 배경으로 렌더되어
+           상속된 흰 글씨와 겹쳐 안 보이던 문제 방지 — 다크 스킴 강제. */
+        :root { color-scheme: dark; }
         body {
             font-family: var(--font);
             background:
@@ -1568,6 +1571,11 @@
                 var(--bg-stage);
             color: var(--text);
             -webkit-font-smoothing: antialiased;
+        }
+        /* select/input은 OS 기본 흰 배경을 끄고 명시적 다크 배경 사용 */
+        select, input[type="text"], input[type="search"], .search-input,
+        .move-select, .browse-controls select, #bulkMoveTarget, #viewerMoveTarget {
+            -webkit-appearance: none; appearance: none;
         }
         *::-webkit-scrollbar { width: 9px; height: 9px; }
         *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
@@ -1979,6 +1987,15 @@
             border: 1px solid var(--line-2); transition: .15s var(--ease); margin-top: 2px;
         }
         .folder-back:hover { background: var(--bg-4); color: var(--text); border-color: var(--line-3); }
+        .folder-organize {
+            display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto;
+            height: 42px; padding: 0 14px; border-radius: var(--r-sm); margin-top: 2px;
+            font-size: 13px; font-weight: 650; color: var(--accent-2);
+            background: var(--accent-soft); border: 1px solid var(--accent-line);
+            transition: .15s var(--ease); white-space: nowrap;
+        }
+        .folder-organize:hover { background: rgba(246,183,60,.24); }
+        .folder-organize:disabled { opacity: .5; pointer-events: none; }
         .fh-sub .crumbs { display: inline; }
         .fh-sub .crumb { color: var(--accent-2); cursor: pointer; }
         .fh-sub .crumb:hover { text-decoration: underline; color: var(--accent); }
@@ -2126,6 +2143,10 @@
                         <h1 id="folderHeadName">모든 영상</h1>
                         <div class="fh-sub" id="folderHeadSub"></div>
                     </div>
+                    <button class="folder-organize" id="organizeBtn" type="button" onclick="organizeOrientation()" style="display:none;" title="가로형/세로형 폴더로 정리">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v15M7 4L4 7M7 4l3 3"/><path d="M17 20V5M17 20l-3-3M17 20l3-3"/></svg>
+                        <span>방향 정리</span>
+                    </button>
                     <div class="field search">
                         <span class="fi-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
                         <input type="text" id="searchInput" class="search-input" placeholder="영상 검색" oninput="handleSearchInput(event)">
@@ -2579,6 +2600,8 @@
             const videosN = browseItems.filter(i => i.type === 'video').length;
             if (headSub) headSub.innerHTML = `<span class="crumbs">${crumb}</span> · ${foldersN}개 폴더 · ${videosN}개 영상`;
             if (back) back.style.display = '';
+            const orgBtn = document.getElementById('organizeBtn');
+            if (orgBtn) { orgBtn.style.display = videosN > 0 ? '' : 'none'; orgBtn.disabled = false; }
 
             const mediaN = browseItems.filter(i => i.type === 'video' || i.type === 'image').length;
             const silentBtn = document.getElementById('silentPlayAllBtn');
@@ -2681,6 +2704,36 @@
         function folderCrumb(j) {
             browsePath = crumbTargets[j] || '';
             loadFolderBrowse();
+        }
+
+        // 현재 폴더의 영상을 가로/세로형 하위 폴더로 정리
+        async function organizeOrientation() {
+            if (currentFolder === 'all') return;
+            const dirName = browsePath ? browsePath.split('/').pop() : browseFolder;
+            if (!confirm(`'${dirName}' 폴더의 영상을 방향별로 정리할까요?\n\n· 세로형 → '세로형 영상' 폴더\n· 가로형·정사각형 → '가로형 영상' 폴더\n\n폴더가 없으면 새로 만들고, 영상을 이동합니다.`)) return;
+
+            const btn = document.getElementById('organizeBtn');
+            if (btn) btn.disabled = true;
+            try {
+                const res = await fetch('/api/organize-orientation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: browseFolder, path: browsePath })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    showToast('정리 실패: ' + (data.error || '오류'), 'delete');
+                    return;
+                }
+                const m = data.moved || {};
+                showToast(`정리 완료 · 가로 ${m.landscape || 0} · 세로 ${m.portrait || 0}${m.skipped ? ` · 건너뜀 ${m.skipped}` : ''}`, 'move');
+                await loadFolderBrowse();
+            } catch (e) {
+                console.error('Organize error:', e);
+                showToast('정리 중 오류가 발생했습니다.', 'delete');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
         }
 
         // 현재 위치(전체/폴더) 기준 미디어 헬퍼
@@ -3293,6 +3346,8 @@
             // 폴더 헤더 + 액션 카드 활성화 상태 (평면 '모든 영상' 모드)
             const back = document.getElementById('folderBackBtn');
             if (back) back.style.display = 'none';
+            const orgBtn = document.getElementById('organizeBtn');
+            if (orgBtn) orgBtn.style.display = 'none';   // 정리는 폴더 탐색 시에만
             const headName = document.getElementById('folderHeadName');
             const headSub = document.getElementById('folderHeadSub');
             if (headName) headName.textContent = '모든 영상';

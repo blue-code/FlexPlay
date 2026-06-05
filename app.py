@@ -1560,6 +1560,90 @@ def move_video_to_target():
     })
 
 
+ORIENTATION_LANDSCAPE_DIR = '가로형 영상'
+ORIENTATION_PORTRAIT_DIR = '세로형 영상'
+
+
+@app.route('/api/organize-orientation', methods=['POST'])
+def organize_by_orientation():
+    """현재 폴더의 영상을 방향(가로/세로)별 하위 폴더로 정리한다.
+
+    - 세로형(높이 > 너비) → '세로형 영상' 폴더
+    - 가로형 및 정사각형(너비 >= 높이) → '가로형 영상' 폴더
+    - 대상 폴더가 없으면 생성. 회전/SAR 보정된 표시 해상도 기준으로 판정.
+    """
+    data = request.get_json(silent=True) or {}
+    folder_name = (data.get('folder') or '').strip()
+    subpath = (data.get('path') or '').strip()
+
+    folders = get_video_folders()
+    root = next((f for f in folders if f['name'] == folder_name), None)
+    if not root:
+        return jsonify({'error': 'Folder not found'}), 404
+
+    base_path = root['path']
+    if subpath:
+        subpath_clean = os.path.normpath(subpath).replace('..', '')
+        current_path = os.path.join(base_path, subpath_clean)
+    else:
+        current_path = base_path
+
+    # 경로가 base_path 내부인지 확인
+    if not os.path.abspath(current_path).startswith(os.path.abspath(base_path)):
+        return jsonify({'error': 'Invalid path'}), 403
+    if not os.path.isdir(current_path):
+        return jsonify({'error': 'Directory not found'}), 404
+
+    moved = {'landscape': 0, 'portrait': 0, 'skipped': 0}
+    errors = []
+
+    for entry in os.listdir(current_path):
+        entry_path = os.path.join(current_path, entry)
+        if entry.startswith('.') or not os.path.isfile(entry_path):
+            continue
+        if os.path.splitext(entry)[1].lower() not in VIDEO_EXTENSIONS:
+            continue
+
+        info = get_media_info(entry_path)
+        resolution = info.get('resolution') or ''
+        if 'x' not in resolution:
+            moved['skipped'] += 1
+            continue
+        try:
+            w_str, h_str = resolution.split('x')
+            width, height = int(w_str), int(h_str)
+        except (ValueError, TypeError):
+            moved['skipped'] += 1
+            continue
+        if width <= 0 or height <= 0:
+            moved['skipped'] += 1
+            continue
+
+        # 세로형: 높이 > 너비 / 그 외(가로·정사각형): 가로형
+        if height > width:
+            target_name, key = ORIENTATION_PORTRAIT_DIR, 'portrait'
+        else:
+            target_name, key = ORIENTATION_LANDSCAPE_DIR, 'landscape'
+
+        target_dir = os.path.join(current_path, target_name)
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            dest_path, _ = generate_unique_destination(target_dir, entry)
+            shutil.move(entry_path, dest_path)
+            delete_thumbnail_for_video(entry_path)  # 이전 위치 썸네일 정리
+            moved[key] += 1
+        except Exception as exc:
+            errors.append({'file': entry, 'error': str(exc)})
+
+    return jsonify({
+        'success': True,
+        'moved': moved,
+        'errors': errors,
+        'landscape_folder': ORIENTATION_LANDSCAPE_DIR,
+        'portrait_folder': ORIENTATION_PORTRAIT_DIR
+    })
+
+
 def get_directory_size(directory):
     """디렉토리의 총 크기 계산 (바이트)"""
     total_size = 0
