@@ -2524,10 +2524,27 @@
         }
         function onSortChange(value) {
             currentSort = value;
+            saveSortPreference();
             if (value === 'random') randomKeys.clear();   // 선택할 때마다 새로 섞기
             metaRefreshAttempts = 0;
             refreshCurrentView();
             const gs = document.querySelector('.grid-scroll'); if (gs) gs.scrollTop = 0;
+        }
+
+        const SORT_VALUES = ['date_desc', 'date_asc', 'name_asc', 'name_desc', 'random'];
+        function saveSortPreference() {
+            try { localStorage.setItem('flexplay_sort', currentSort); } catch (e) {}
+        }
+        // 저장된 정렬 상태를 복원 (다음 접속에도 유지)
+        function loadSortPreference() {
+            try {
+                const v = localStorage.getItem('flexplay_sort');
+                if (v && SORT_VALUES.includes(v)) {
+                    currentSort = v;
+                    const sel = document.getElementById('sortSelect');
+                    if (sel) sel.value = v;
+                }
+            } catch (e) {}
         }
         function refreshCurrentView() {
             if (currentFolder === 'all') {
@@ -2922,6 +2939,7 @@
 
         // 페이지 로드 시 영상 목록 불러오기
         window.addEventListener('load', () => {
+            loadSortPreference();   // 저장된 정렬 상태 복원 (loadFolders/loadVideos 보다 먼저)
             loadFolders();
             loadHistory();
             setupKeyboardShortcuts();
