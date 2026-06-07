@@ -2000,6 +2000,16 @@
         }
         .folder-organize:hover { background: rgba(246,183,60,.24); }
         .folder-organize:disabled { opacity: .5; pointer-events: none; }
+        .sort-select {
+            flex: 0 0 auto; height: 42px; margin-top: 2px; padding: 0 12px;
+            border-radius: var(--r-sm); font-size: 13px; font-weight: 600;
+            color: var(--text); background: rgba(255,255,255,0.04);
+            border: 1px solid var(--line-2); cursor: pointer; transition: .15s var(--ease);
+        }
+        .sort-select:hover { border-color: var(--line-3); background: rgba(255,255,255,0.06); }
+        .sort-select:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+        .sort-select option { background: var(--bg-2); color: var(--text); }
+        .folder-head { flex-wrap: wrap; }
         .fh-sub .crumbs { display: inline; }
         .fh-sub .crumb { color: var(--accent-2); cursor: pointer; }
         .fh-sub .crumb:hover { text-decoration: underline; color: var(--accent); }
@@ -2147,6 +2157,13 @@
                         <h1 id="folderHeadName">모든 영상</h1>
                         <div class="fh-sub" id="folderHeadSub"></div>
                     </div>
+                    <select class="sort-select" id="sortSelect" onchange="onSortChange(this.value)" title="정렬">
+                        <option value="date_desc">최신순 ↓</option>
+                        <option value="date_asc">오래된순 ↑</option>
+                        <option value="name_asc">이름 ㄱ→ㅎ</option>
+                        <option value="name_desc">이름 ㅎ→ㄱ</option>
+                        <option value="random">랜덤 🔀</option>
+                    </select>
                     <button class="folder-organize" id="organizeBtn" type="button" onclick="organizeOrientation()" style="display:none;" title="가로형/세로형 폴더로 정리">
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v15M7 4L4 7M7 4l3 3"/><path d="M17 20V5M17 20l-3-3M17 20l3-3"/></svg>
                         <span>방향 정리</span>
@@ -2477,7 +2494,50 @@
         // ===== 폴더-우선 브라우즈 상태 + 헬퍼 =====
         let currentFolder = 'all';          // 'all' | 폴더명 (단일 선택 네비게이션)
         let currentGridVideos = [];         // 현재 그리드에 표시 중인(폴더 스코프) 영상들
+        let currentBrowseMedia = [];        // 폴더 탐색 모드에서 정렬된 미디어(영상+이미지)
         let railFolderNames = ['all'];      // 레일 인덱스 → 폴더명 매핑
+
+        // ===== 정렬 =====
+        let currentSort = 'date_desc';      // date_desc|date_asc|name_asc|name_desc|random
+        const randomKeys = new Map();       // 랜덤 정렬 시 항목별 고정 키 (재렌더 안정성)
+
+        function itemKey(v) {
+            return `${v.name}|${v.size || ''}|${v.modified || ''}`;
+        }
+        function randKey(v) {
+            const k = itemKey(v);
+            if (!randomKeys.has(k)) randomKeys.set(k, Math.random());
+            return randomKeys.get(k);
+        }
+        function applySort(list) {
+            const arr = (list || []).slice();
+            const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true, sensitivity: 'base' });
+            const byDate = (a, b) => (new Date(a.modified || 0)) - (new Date(b.modified || 0));
+            switch (currentSort) {
+                case 'date_asc':  arr.sort(byDate); break;
+                case 'date_desc': arr.sort((a, b) => byDate(b, a)); break;
+                case 'name_asc':  arr.sort(byName); break;
+                case 'name_desc': arr.sort((a, b) => byName(b, a)); break;
+                case 'random':    arr.sort((a, b) => randKey(a) - randKey(b)); break;
+            }
+            return arr;
+        }
+        function onSortChange(value) {
+            currentSort = value;
+            if (value === 'random') randomKeys.clear();   // 선택할 때마다 새로 섞기
+            metaRefreshAttempts = 0;
+            refreshCurrentView();
+            const gs = document.querySelector('.grid-scroll'); if (gs) gs.scrollTop = 0;
+        }
+        function refreshCurrentView() {
+            if (currentFolder === 'all') {
+                displayVideos(videos);
+            } else {
+                const q = (searchTerm || '').trim().toLowerCase();
+                const list = q ? browseItems.filter(it => (it.name || '').toLowerCase().includes(q)) : browseItems;
+                renderFolderBrowseGrid(list);
+            }
+        }
 
         const SVG = {
             chevR: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
@@ -2503,7 +2563,7 @@
             const list = currentFolder === 'all'
                 ? videos
                 : videos.filter(v => (v.folder || 'Unknown') === currentFolder);
-            return list.filter(v => !pendingDeletes.has(v.name));
+            return applySort(list.filter(v => !pendingDeletes.has(v.name)));
         }
 
         function folderMetaFor(name) {
@@ -2623,7 +2683,13 @@
             if (!container) return;
             container.classList.add('vgrid');
             // 보류 중 삭제 항목 숨김 (실행취소 시 자연 복원)
-            const shown = (list || []).filter(it => !(it.type === 'video' && pendingDeletes.has(browseItemFullPath(it))));
+            const visible = (list || []).filter(it => !(it.type === 'video' && pendingDeletes.has(browseItemFullPath(it))));
+            // 폴더는 항상 먼저(이름순), 미디어는 선택한 정렬 기준 적용
+            const folders = visible.filter(it => it.type === 'folder')
+                .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true }));
+            const media = applySort(visible.filter(it => it.type === 'video' || it.type === 'image'));
+            currentBrowseMedia = media;   // 뷰어/무음재생이 같은 순서를 쓰도록 보관
+            const shown = folders.concat(media);
             if (shown.length === 0) {
                 container.innerHTML = `<div class="empty-grid">${SVG.filmBig}<div>이 폴더가 비어 있어요</div></div>`;
                 return;
@@ -2700,7 +2766,7 @@
         function openBrowseMediaByIdx(i) {
             const it = browseItems[i];
             if (!it) return;
-            const media = browseItems.filter(x => x.type === 'video' || x.type === 'image');
+            const media = currentBrowseMedia.length ? currentBrowseMedia : browseItems.filter(x => x.type === 'video' || x.type === 'image');
             try { videoPlayer.pause(); const s = videoPlayer.querySelector('source'); if (s) s.src = ''; videoPlayer.load(); } catch (e) {}
             viewerItems = media.map(x => ({ ...x }));
             viewerCurrentIndex = Math.max(0, media.findIndex(x => x._idx === it._idx));
@@ -2759,14 +2825,18 @@
             }
         }
 
-        // 현재 위치(전체/폴더) 기준 미디어 헬퍼
+        // 현재 위치(전체/폴더) 기준 미디어 헬퍼 — 정렬된 순서를 그대로 사용
+        function browseMediaSorted() {
+            if (currentBrowseMedia.length) return currentBrowseMedia;
+            return applySort((browseItems || []).filter(i => i.type === 'video' || i.type === 'image'));
+        }
         function getCurrentDirVideos() {
             if (currentFolder === 'all') return getFolderScopedVideos();
-            return (browseItems || []).filter(i => i.type === 'video');
+            return browseMediaSorted().filter(i => i.type === 'video');
         }
         function getCurrentDirMedia() {
             if (currentFolder === 'all') return getFolderScopedVideos();
-            return (browseItems || []).filter(i => i.type === 'video' || i.type === 'image');
+            return browseMediaSorted();
         }
 
         // 뷰어 기반 무소음 연속재생 (폴더/하위폴더용)
