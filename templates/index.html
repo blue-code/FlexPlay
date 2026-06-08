@@ -2070,6 +2070,19 @@
         .vcard .poster .play-ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: .2s var(--ease); }
         .vcard:hover .poster .play-ov { opacity: 1; }
         .vcard .poster .play-ov .pbtn { width: 46px; height: 46px; border-radius: 50%; background: rgba(246,183,60,.94); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; box-shadow: var(--sh-2); }
+        /* 재생 상태 배지 (재생중 / 완료) */
+        .vcard .poster .status-badge { position: absolute; top: 7px; left: 7px; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; line-height: 1; padding: 4px 7px; border-radius: 6px; letter-spacing: .2px; box-shadow: var(--sh-1); }
+        .vcard .poster .status-badge svg { width: 12px; height: 12px; }
+        .vcard .poster .status-badge.done { background: var(--good); color: #06281c; }
+        .vcard .poster .status-badge.playing { display: none; background: #4c9cff; color: #04122b; }
+        .vcard .poster .status-badge.playing .pdot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: nowPlayingPulse 1s ease-in-out infinite; }
+        .vcard.now-playing .poster .status-badge.playing { display: inline-flex; }
+        .vcard.now-playing .poster .status-badge.done { display: none; }
+        .vcard.now-playing { border-color: #4c9cff; box-shadow: 0 0 0 1px #4c9cff, 0 0 18px rgba(76,156,255,.35); }
+        @keyframes nowPlayingPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.6); } }
+        /* 이어보기 진행률 바 */
+        .vcard .poster .prog { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.18); }
+        .vcard .poster .prog > i { display: block; height: 100%; background: var(--accent); }
         .vcard .vmeta { padding: 9px 11px 11px; }
         .vcard .vname { font-size: 12.5px; font-weight: 650; line-height: 1.3; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
         .vcard .vsub { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--text-3); }
@@ -2911,7 +2924,8 @@
         let playbackHistory = new Map();
         let historySaveHandle = null;
         let pendingResumeTime = 0;
-        const LONG_VIDEO_THRESHOLD = 180; // 3 minutes
+        let nowPlayingName = null;   // 현재 재생/뷰어에 열린 영상 이름 (리스트 '재생중' 표시용)
+        const LONG_VIDEO_THRESHOLD = 180; // 3 minutes (썸네일 시킹 등 기타 용도)
         const HISTORY_SAVE_INTERVAL_MS = 15000;
         const HISTORY_MIN_POSITION = 5;
         const IOS_FULLSCREEN_EXIT_GRACE_MS = 2200;
@@ -3488,19 +3502,30 @@
                     ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="" loading="lazy">`
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                 const durText = video.duration ? formatDurationShort(video.duration) : '';
-                const watched = video.watched
-                    ? `<span class="watched-tick">${SVG.check}</span>` : '';
+                const isPlaying = nowPlayingName && video.name === nowPlayingName;
+                // 완료 배지(시청 완료) / 재생중 배지(.now-playing 클래스로 토글)
+                const doneBadge = video.watched
+                    ? `<span class="status-badge done">${SVG.check}완료</span>` : '';
+                const playingBadge = `<span class="status-badge playing"><span class="pdot"></span>재생중</span>`;
+                // 이어보기 진행률 (시청 완료가 아니고 저장된 위치가 있을 때)
+                let progPct = 0;
+                if (!video.watched && video.duration && video.resume_position) {
+                    progPct = Math.max(0, Math.min(100, (video.resume_position / video.duration) * 100));
+                }
+                const progBar = progPct > 0 ? `<div class="prog"><i style="width:${progPct.toFixed(1)}%"></i></div>` : '';
 
                 return `
-                    <div class="vcard" data-filename="${encodedName}" onclick="openFolderViewer(${idx})">
+                    <div class="vcard${isPlaying ? ' now-playing' : ''}" data-filename="${encodedName}" onclick="openFolderViewer(${idx})">
                         <button class="card-del" title="삭제"
                                 onclick="event.stopPropagation(); deleteVideo(decodeURIComponent('${encodedName}'), event)">${SVG.trash}</button>
                         <div class="poster">
                             ${thumbContent}
                             <div class="sheen"></div>
-                            ${watched}
+                            ${doneBadge}
+                            ${playingBadge}
                             ${durText ? `<div class="dur">${durText}</div>` : ''}
                             <div class="play-ov"><span class="pbtn">${SVG.play}</span></div>
+                            ${progBar}
                         </div>
                         <div class="vmeta">
                             <div class="vname">${escapeHtml(video.name)}</div>
@@ -3562,6 +3587,7 @@
 
             await ensureHistoryReady();
             currentVideo = filename;
+            updateNowPlayingIndicator(filename);
             const fullscreenModeBeforeLoad = detectFullscreenMode();
 
             if (silentPlaylistEnabled && silentPlaylist.length > 0) {
@@ -4746,6 +4772,8 @@
                         : (isFinite(videoPlayer.duration) ? videoPlayer.duration : null)
                 };
                 playbackHistory.set(filename, payload.position);
+                // 리스트의 진행률/완료 상태를 즉시 반영
+                updateVideoProgress(filename, payload.position, payload.duration);
                 const response = await fetch('/api/history', {
                     method: 'POST',
                     headers: {
@@ -4753,9 +4781,6 @@
                     },
                     body: JSON.stringify(payload)
                 });
-                if (response.ok) {
-                    setVideoWatched(filename);
-                }
             } catch (error) {
                 console.error('Error saving history:', error);
             }
@@ -4805,11 +4830,76 @@
             }
         }
 
+        // 백엔드(WATCH_COMPLETE_RATIO/OFFSET)와 동일한 '시청 완료' 판정 기준
+        const WATCH_COMPLETE_RATIO = 0.9;
+        const WATCH_COMPLETE_OFFSET = 30; // seconds
+
+        function isWatchedComplete(position, duration) {
+            if (!duration || duration <= 0) return false;
+            const threshold = Math.max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET);
+            return position >= threshold;
+        }
+
+        // DOM에서 해당 파일명의 카드를 찾는다 (인코딩 특수문자 안전하게 디코드 비교)
+        function findCardByName(filename) {
+            let found = null;
+            document.querySelectorAll('.vcard[data-filename]').forEach(card => {
+                if (!found && decodeURIComponent(card.dataset.filename || '') === filename) found = card;
+            });
+            return found;
+        }
+
+        // 단일 카드의 완료 배지/진행률 바를 갱신 (전체 재렌더 없이 — 재생 중 깜빡임 방지)
+        function patchCardStatus(video) {
+            const card = findCardByName(video.name);
+            if (!card) return;
+            const poster = card.querySelector('.poster');
+            if (!poster) return;
+
+            // 완료 배지
+            if (video.watched && !poster.querySelector('.status-badge.done')) {
+                const badge = document.createElement('span');
+                badge.className = 'status-badge done';
+                badge.innerHTML = `${SVG.check}완료`;
+                const sheen = poster.querySelector('.sheen');
+                if (sheen) sheen.insertAdjacentElement('afterend', badge);
+                else poster.insertBefore(badge, poster.firstChild);
+            }
+
+            // 진행률 바 (완료가 아니고 저장 위치가 있을 때)
+            let pct = 0;
+            if (!video.watched && video.duration && video.resume_position) {
+                pct = Math.max(0, Math.min(100, (video.resume_position / video.duration) * 100));
+            }
+            let prog = poster.querySelector('.prog');
+            if (pct > 0) {
+                if (!prog) {
+                    prog = document.createElement('div');
+                    prog.className = 'prog';
+                    prog.innerHTML = '<i></i>';
+                    poster.appendChild(prog);
+                }
+                prog.querySelector('i').style.width = pct.toFixed(1) + '%';
+            } else if (prog && video.watched) {
+                prog.remove();
+            }
+        }
+
+        // 메모리상의 영상 객체 진행 상태 갱신 + 카드 반영
+        function updateVideoProgress(filename, position, duration) {
+            const video = videos.find(v => v.name === filename);
+            if (!video) return;
+            if (typeof position === 'number') video.resume_position = position;
+            const dur = duration || video.duration || 0;
+            if (isWatchedComplete(position, dur)) video.watched = true;
+            patchCardStatus(video);
+        }
+
         function setVideoWatched(filename) {
             const video = videos.find(v => v.name === filename);
             if (video && !video.watched) {
                 video.watched = true;
-                displayVideos(videos);
+                patchCardStatus(video);
             }
         }
 
@@ -4818,25 +4908,22 @@
             return stored >= HISTORY_MIN_POSITION ? stored : 0;
         }
 
+        // 저장된 위치를 영상 길이에 맞게 보정한다.
+        // - 길이에 관계없이(무조건) 마지막 위치에서 이어보기
+        // - 사실상 끝까지 본 영상(끝 1.5초 이내)은 처음부터 다시보기
+        function clampResume(saved, duration) {
+            if (!saved || saved < HISTORY_MIN_POSITION) return 0;
+            if (duration && isFinite(duration) && duration > 0) {
+                if (saved >= duration - 1.5) return 0;
+                return Math.min(saved, Math.max(duration - 0.5, HISTORY_MIN_POSITION));
+            }
+            return saved;
+        }
+
         function prepareResumeForVideo(filename) {
-            pendingResumeTime = 0;
             const video = videos.find(v => v.name === filename);
             const duration = video ? Number(video.duration || 0) : 0;
-
-            const saved = getResumePosition(filename);
-            if (!saved) return;
-
-            if (duration && duration < LONG_VIDEO_THRESHOLD) {
-                return;
-            }
-
-            if (!duration || !isFinite(duration)) {
-                pendingResumeTime = saved;
-                return;
-            }
-
-            const safeDuration = Math.max(duration - 0.5, HISTORY_MIN_POSITION);
-            pendingResumeTime = Math.min(saved, safeDuration);
+            pendingResumeTime = clampResume(getResumePosition(filename), duration);
         }
 
         function resolveStartTime(fallbackSeconds = 0) {
@@ -4846,10 +4933,20 @@
             return startTime;
         }
 
+        // 현재 위치 저장/이어보기 seek가 동작할 활성 플레이어를 돌려준다.
+        // 전체화면 뷰어가 떠 있으면 그 안의 동적 <video>, 아니면 메인 플레이어.
+        function getActivePlayer() {
+            if (viewerActive) {
+                const v = document.getElementById('viewerVideo');
+                if (v) return v;
+            }
+            return videoPlayer;
+        }
+
         function handleProgressAutoSave() {
             if (!currentVideo) return;
-            if (videoPlayer.duration && videoPlayer.duration < LONG_VIDEO_THRESHOLD) return;
-            if (videoPlayer.currentTime < HISTORY_MIN_POSITION) return;
+            const player = getActivePlayer();
+            if (!player || (player.currentTime || 0) < HISTORY_MIN_POSITION) return;
             if (historySaveHandle) return;
 
             historySaveHandle = setTimeout(() => {
@@ -4860,15 +4957,31 @@
 
         function savePlaybackPosition(force = false) {
             if (!currentVideo) return;
-            const duration = videoPlayer.duration || 0;
-            if (duration && duration < LONG_VIDEO_THRESHOLD) {
-                return;
-            }
-            const position = videoPlayer.currentTime || 0;
+            const player = getActivePlayer();
+            if (!player) return;
+            const duration = player.duration || 0;
+            const position = player.currentTime || 0;
             if (!force && position < HISTORY_MIN_POSITION) {
                 return;
             }
-            saveToHistory(currentVideo, position, duration);
+            saveToHistory(currentVideo, position, isFinite(duration) ? duration : undefined);
+        }
+
+        // 전체화면 뷰어의 현재 영상 위치를 즉시 저장 (영상 교체/뷰어 종료 직전 호출)
+        function flushViewerProgress() {
+            const v = document.getElementById('viewerVideo');
+            if (v && currentVideo && (v.currentTime || 0) >= HISTORY_MIN_POSITION) {
+                saveToHistory(currentVideo, v.currentTime || 0, isFinite(v.duration) ? v.duration : undefined);
+            }
+        }
+
+        // 리스트에서 '재생중' 표시를 갱신한다 (전체 재렌더 없이 클래스만 토글).
+        function updateNowPlayingIndicator(filename) {
+            nowPlayingName = filename || null;
+            document.querySelectorAll('.vcard[data-filename]').forEach(card => {
+                const fn = decodeURIComponent(card.dataset.filename || '');
+                card.classList.toggle('now-playing', !!filename && fn === filename);
+            });
         }
 
         function escapeHtml(value) {
@@ -5444,7 +5557,11 @@
             document.body.style.position = '';
             document.body.style.width = '';
 
-            // 비디오가 재생 중이면 정지
+            // 비디오가 재생 중이면 위치 저장 후 정지
+            flushViewerProgress();
+            updateNowPlayingIndicator(null);
+            // 아래 pause()가 메인 플레이어(위치 0) 기준으로 위치를 덮어쓰지 않도록 차단
+            currentVideo = null;
             const container = document.getElementById('viewerMediaContainer');
             const video = container.querySelector('video');
             if (video) {
@@ -5491,7 +5608,8 @@
             prevBtn.disabled = viewerCurrentIndex === 0;
             nextBtn.disabled = viewerCurrentIndex === viewerItems.length - 1;
 
-            // 미디어 표시
+            // 미디어 표시 (이전 영상이 있으면 위치 저장 후 교체)
+            flushViewerProgress();
             container.innerHTML = '';
             folderView.classList.remove('active');
 
@@ -5576,6 +5694,33 @@
                             viewerNavigate(1);
                         });
                     }
+
+                    // 마지막 재생 위치 기억 + 기록 저장 (일반/무소음 공통)
+                    currentVideo = item.name;
+                    updateNowPlayingIndicator(item.name);
+
+                    const savedPos = (typeof item.resume_position === 'number' ? item.resume_position : 0)
+                        || (playbackHistory.get(item.name) || 0);
+                    const itemDuration = Number(item.duration || 0);
+                    video.addEventListener('loadedmetadata', function onMeta() {
+                        video.removeEventListener('loadedmetadata', onMeta);
+                        // 무소음 연속재생(배경 몽타주)은 처음부터 — 개별 시청 때만 이어보기
+                        if (viewerSilentFallbackActive) return;
+                        const dur = isFinite(video.duration) && video.duration > 0 ? video.duration : itemDuration;
+                        const target = clampResume(savedPos, dur);
+                        if (target > 0) {
+                            try {
+                                const cap = (video.duration || target) - 0.3;
+                                video.currentTime = Math.min(target, cap);
+                            } catch (e) { /* seek 실패 무시 */ }
+                        }
+                    });
+                    video.addEventListener('timeupdate', handleProgressAutoSave);
+                    video.addEventListener('pause', () => savePlaybackPosition(true));
+                    video.addEventListener('ended', () => {
+                        savePlaybackPosition(true);
+                        setVideoWatched(item.name);
+                    });
                 }
             }
         }
