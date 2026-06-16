@@ -48,4 +48,19 @@ echo ""
 echo "종료하려면 Ctrl+C를 누르세요."
 echo ""
 
-python app.py
+# 5. Start NeonTunnel (Background)
+echo "🚇 Starting NeonTunnel (Port 7777 -> dipbot)..."
+if command -v neon-tunnel &> /dev/null; then
+    # Force IPv4 local binding to ensure connection
+    neon-tunnel --port 7777 -r 33136 --server http://vozi.duckdns.org:3000 > tunnel.log 2>&1 &
+    TUNNEL_PID=$!
+    echo "✅ Tunnel started (PID: $TUNNEL_PID). Check tunnel.log for details."
+    echo "connect to http://vozi.duckdns.org:33136"
+else
+    echo "⚠️ 'neon-tunnel' command not found. Skipping tunnel."
+    echo "   (Install via: npm install -g /Volumes/SSD/DEV_SSD/MY/NeonTunnel/client-cli)"
+fi
+
+./venv/bin/python app.py
+
+
