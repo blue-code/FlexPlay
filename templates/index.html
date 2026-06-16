@@ -2434,6 +2434,15 @@
                         🗑️ 삭제
                     </button>
                 </div>
+                <div class="action-row" style="gap: 6px; align-items: center;">
+                    <label style="color: #fff; font-size: 0.85em; white-space: nowrap;">분할 단위</label>
+                    <input type="number" id="splitMinutes" value="2" min="0.1" max="120" step="0.5"
+                        style="flex: 0 0 64px; width: 64px; padding: 12px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.35); color: #fff; font-size: 0.95em; text-align: center;">
+                    <span style="color: #fff; font-size: 0.85em;">분</span>
+                    <button class="action-btn-large" style="flex: 1; padding: 14px 12px;" onclick="splitCurrentVideo()">
+                        ✂️ 분할
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -2993,7 +3002,14 @@
             videoPlayer.addEventListener('timeupdate', handleProgressAutoSave);
             videoPlayer.addEventListener('pause', () => savePlaybackPosition(true));
             videoPlayer.addEventListener('ended', () => savePlaybackPosition(true));
-            window.addEventListener('beforeunload', () => savePlaybackPosition(true));
+
+            // 마지막 위치 유실 방지: 종료/백그라운드 전환 시 sendBeacon으로 확실히 저장.
+            // (메인 플레이어/뷰어 공통 — getActivePlayer가 현재 재생 중인 영상을 선택)
+            window.addEventListener('pagehide', flushPositionOnExit);
+            window.addEventListener('beforeunload', flushPositionOnExit);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') flushPositionOnExit();
+            });
 
             // 구간 편집 단축키
             document.addEventListener('keydown', (e) => {
@@ -4762,7 +4778,9 @@
         }
 
         // 재생 기록 저장
-        async function saveToHistory(filename, position, durationOverride) {
+        // useBeacon=true: 페이지 종료/백그라운드 전환 시 navigator.sendBeacon으로 확실히 전송
+        // (이때 비동기 fetch는 브라우저가 취소하므로 마지막 위치가 유실됨)
+        async function saveToHistory(filename, position, durationOverride, useBeacon = false) {
             try {
                 const payload = {
                     filename: filename,
@@ -4774,12 +4792,22 @@
                 playbackHistory.set(filename, payload.position);
                 // 리스트의 진행률/완료 상태를 즉시 반영
                 updateVideoProgress(filename, payload.position, payload.duration);
-                const response = await fetch('/api/history', {
+
+                const body = JSON.stringify(payload);
+                if (useBeacon && navigator.sendBeacon) {
+                    const blob = new Blob([body], { type: 'application/json' });
+                    navigator.sendBeacon('/api/history', blob);
+                    return;
+                }
+
+                await fetch('/api/history', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(payload)
+                    body: body,
+                    // 탭 전환/종료 중에도 요청이 끝까지 전달되도록
+                    keepalive: true
                 });
             } catch (error) {
                 console.error('Error saving history:', error);
@@ -4955,7 +4983,7 @@
             }, HISTORY_SAVE_INTERVAL_MS);
         }
 
-        function savePlaybackPosition(force = false) {
+        function savePlaybackPosition(force = false, useBeacon = false) {
             if (!currentVideo) return;
             const player = getActivePlayer();
             if (!player) return;
@@ -4964,7 +4992,17 @@
             if (!force && position < HISTORY_MIN_POSITION) {
                 return;
             }
-            saveToHistory(currentVideo, position, isFinite(duration) ? duration : undefined);
+            saveToHistory(currentVideo, position, isFinite(duration) ? duration : undefined, useBeacon);
+        }
+
+        // 페이지가 닫히거나 백그라운드로 전환될 때 마지막 위치를 확실히 저장한다.
+        // 모바일(iOS Safari)은 beforeunload를 잘 발생시키지 않으므로 pagehide/visibilitychange가 핵심.
+        function flushPositionOnExit() {
+            if (historySaveHandle) {
+                clearTimeout(historySaveHandle);
+                historySaveHandle = null;
+            }
+            savePlaybackPosition(true, true);
         }
 
         // 전체화면 뷰어의 현재 영상 위치를 즉시 저장 (영상 교체/뷰어 종료 직전 호출)
@@ -5217,7 +5255,10 @@
 
                         setTimeout(() => {
                             overlay.style.display = 'none';
-                            if (data.outputs && Array.isArray(data.outputs) && data.outputs.length > 0) {
+                            const isSplit = data.mode === 'split';
+                            if (isSplit && data.outputs && data.outputs.length > 0) {
+                                alert(`분할 완료! (${data.outputs.length}개)\n원본은 '${data.origin_folder || 'origin'}' 폴더로 이동되었습니다.\n\n생성된 파일:\n${data.outputs.join('\n')}`);
+                            } else if (data.outputs && Array.isArray(data.outputs) && data.outputs.length > 0) {
                                 alert(`추출 완료!\n\n생성된 파일:\n${data.outputs.join('\n')}`);
                             } else if (data.output_file) {
                                 alert(`편집이 완료되었습니다!\n\n새 파일: ${data.output_file}`);
@@ -5225,7 +5266,19 @@
                                 alert('작업이 완료되었습니다.');
                             }
                             resetEditState();
-                            loadVideos();  // 영상 목록 새로고침
+                            if (isSplit) {
+                                // 원본이 이동되었으므로 뷰어를 닫고 현재 보기를 새로고침
+                                closeFullscreenViewer();
+                                if (currentFolder !== 'all') {
+                                    loadFolderBrowse();
+                                } else if (isBrowseMode) {
+                                    loadBrowseDirectory();
+                                } else {
+                                    loadVideos();
+                                }
+                            } else {
+                                loadVideos();  // 영상 목록 새로고침
+                            }
                         }, 1000);
                     } else if (data.status === 'error') {
                         clearInterval(pollInterval);
@@ -5736,6 +5789,55 @@
 
                 // 네비게이션 후 컨트롤 보이고 타이머 리셋
                 showViewerControls();
+            }
+        }
+
+        // 현재 뷰어 영상을 분단위로 분할 (원본은 같은 경로의 'origin' 폴더로 이동)
+        async function splitCurrentVideo() {
+            if (!viewerItems || viewerItems.length === 0) return;
+            const item = viewerItems[viewerCurrentIndex];
+            if (!item || item.type !== 'video') return;
+
+            const input = document.getElementById('splitMinutes');
+            let minutes = parseFloat(input && input.value);
+            if (!isFinite(minutes) || minutes <= 0) minutes = 2;
+            minutes = Math.max(0.1, Math.min(minutes, 120));
+
+            const fullPath = item.folder ? `${item.name}` : (browsePath ? `${browsePath}/${item.name}` : item.name);
+
+            if (!confirm(`"${item.name}"을(를) ${minutes}분 단위로 분할합니다.\n원본은 같은 경로의 'origin' 폴더로 이동됩니다.`)) {
+                return;
+            }
+
+            const overlay = document.getElementById('progressOverlay');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            overlay.style.display = 'flex';
+            progressFill.style.width = '0%';
+            progressText.textContent = '분할 작업을 시작합니다...';
+
+            try {
+                const response = await fetch('/api/split', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: fullPath, minutes: minutes })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || '분할 요청 실패');
+                }
+
+                const data = await response.json();
+                if (data.task_id) {
+                    checkEditProgress(data.task_id);
+                } else {
+                    throw new Error('작업 ID를 받지 못했습니다.');
+                }
+            } catch (error) {
+                overlay.style.display = 'none';
+                alert('분할 중 오류가 발생했습니다: ' + error.message);
+                console.error('Split error:', error);
             }
         }
 

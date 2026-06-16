@@ -1849,7 +1849,8 @@ def handle_history():
         return jsonify(history)
 
     elif request.method == 'POST':
-        data = request.get_json()
+        # navigator.sendBeacon은 Content-Type이 다를 수 있으므로 강제 파싱
+        data = request.get_json(force=True, silent=True) or {}
         history = load_history()
 
         filename = data.get('filename')
@@ -1904,8 +1905,8 @@ def handle_history():
             'watched': watched_flag
         })
 
-        # 최대 50개까지만 유지
-        history = history[:50]
+        # 재생 위치 이어보기를 위해 충분히 큰 한도를 둔다 (라이브러리가 커도 위치 유지)
+        history = history[:2000]
 
         save_history(history)
         return jsonify({'success': True})
@@ -2192,6 +2193,126 @@ def process_video_extract(task_id, video_path, segments, output_dir):
     except Exception as e:
         edit_tasks[task_id]['status'] = 'error'
         edit_tasks[task_id]['error'] = str(e)
+
+
+def process_video_split(task_id, video_path, segment_seconds):
+    """영상을 일정 시간(분) 단위로 분할하고, 원본은 같은 경로의 'origin' 폴더로 이동한다.
+
+    - 분할은 ffmpeg segment 머서 + 스트림 복사(-c copy)로 빠르고 무손실 처리한다.
+      (복사 모드는 키프레임 경계에서 잘리므로 각 조각 길이는 요청값에 근사한다.)
+    - 분할 조각은 원본이 있던 현재 경로에 그대로 저장한다.
+    """
+    try:
+        edit_tasks[task_id]['status'] = 'processing'
+        edit_tasks[task_id]['progress'] = 5
+        edit_tasks[task_id]['outputs'] = []
+
+        video_dir = os.path.dirname(video_path)
+        original_name = os.path.basename(video_path)
+        base_name, ext = os.path.splitext(original_name)
+
+        # 충돌 방지를 위한 고유 토큰이 붙은 임시 출력 패턴
+        token = str(int(time.time()))
+        temp_prefix = f"{base_name}_part_{token}_"
+        pattern = os.path.join(video_dir, f"{temp_prefix}%03d{ext}")
+
+        cmd = [
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+            '-i', video_path,
+            '-c', 'copy', '-map', '0',
+            '-f', 'segment',
+            '-segment_time', str(segment_seconds),
+            '-reset_timestamps', '1',
+            pattern
+        ]
+        subprocess.run(cmd, capture_output=True, check=True)
+
+        # 생성된 조각들을 수집해 사람이 읽기 좋은 이름(_part001 …)으로 정리
+        produced = sorted(
+            f for f in os.listdir(video_dir)
+            if f.startswith(temp_prefix) and f.endswith(ext)
+        )
+        if not produced:
+            raise ValueError("분할 결과 파일이 생성되지 않았습니다.")
+
+        edit_tasks[task_id]['progress'] = 80
+        outputs = []
+        for idx, fname in enumerate(produced, start=1):
+            src = os.path.join(video_dir, fname)
+            nice_name = f"{base_name}_part{idx:03d}{ext}"
+            dst_path, dst_name = generate_unique_destination(video_dir, nice_name)
+            os.rename(src, dst_path)
+            outputs.append(dst_name)
+        edit_tasks[task_id]['outputs'] = outputs
+
+        # 원본을 같은 경로의 'origin' 폴더로 이동 (보존)
+        origin_dir = os.path.join(video_dir, 'origin')
+        os.makedirs(origin_dir, exist_ok=True)
+        origin_path, _ = generate_unique_destination(origin_dir, original_name)
+        shutil.move(video_path, origin_path)
+
+        edit_tasks[task_id]['origin_folder'] = 'origin'
+        edit_tasks[task_id]['status'] = 'completed'
+        edit_tasks[task_id]['progress'] = 100
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode('utf-8', 'ignore') if isinstance(e.stderr, bytes) else (e.stderr or '')
+        edit_tasks[task_id]['status'] = 'error'
+        edit_tasks[task_id]['error'] = (err.strip()[-400:] or 'ffmpeg 분할 실패')
+    except Exception as e:
+        edit_tasks[task_id]['status'] = 'error'
+        edit_tasks[task_id]['error'] = str(e)
+
+
+@app.route('/api/split', methods=['POST'])
+def start_split():
+    """영상 분단위 분할 시작"""
+    try:
+        data = request.get_json() or {}
+        filename = data.get('filename')
+
+        if not filename:
+            return jsonify({'error': 'Invalid parameters'}), 400
+
+        # 분할 단위(분). 기본 2분, 0.1~120분 범위로 제한
+        try:
+            minutes = float(data.get('minutes', 2))
+        except (TypeError, ValueError):
+            minutes = 2
+        minutes = max(0.1, min(minutes, 120))
+        segment_seconds = round(minutes * 60, 3)
+
+        video_path = find_video_path(filename)
+        if not video_path:
+            return jsonify({'error': 'Video not found'}), 404
+
+        if not FFMPEG_AVAILABLE:
+            return jsonify({'error': 'ffmpeg를 사용할 수 없습니다.'}), 500
+
+        task_id = str(uuid.uuid4())
+        edit_tasks[task_id] = {
+            'status': 'pending',
+            'progress': 0,
+            'outputs': [],
+            'error': None,
+            'mode': 'split'
+        }
+
+        thread = threading.Thread(
+            target=process_video_split,
+            args=(task_id, video_path, segment_seconds)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'task_id': task_id,
+            'message': 'Split task started'
+        })
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/edit', methods=['POST'])
