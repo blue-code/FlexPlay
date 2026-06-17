@@ -1091,6 +1091,53 @@ def serve_image(folder_name, filepath):
     return send_file(image_path, mimetype=mime_type)
 
 
+RANGE_CHUNK_SIZE = 1024 * 1024  # 1MB; stream in chunks instead of buffering whole range in RAM
+
+
+def build_range_response(file_path, range_header, mimetype):
+    """Range 요청을 청크 단위로 스트리밍하는 206 응답을 생성한다.
+
+    전체 구간을 메모리에 읽지 않으므로(`bytes=0-` 같은 큰 요청도 안전) 대용량
+    영상 탐색 시 메모리 사용량이 일정하게 유지된다.
+    """
+    size = os.path.getsize(file_path)
+    byte_start, byte_end = 0, size - 1
+
+    byte_range = range_header.replace('bytes=', '').split('-')
+    if byte_range[0]:
+        byte_start = int(byte_range[0])
+    if len(byte_range) > 1 and byte_range[1]:
+        byte_end = int(byte_range[1])
+
+    byte_start = max(0, min(byte_start, size - 1))
+    byte_end = max(byte_start, min(byte_end, size - 1))
+    length = byte_end - byte_start + 1
+
+    def generate():
+        remaining = length
+        with open(file_path, 'rb') as f:
+            f.seek(byte_start)
+            while remaining > 0:
+                chunk = f.read(min(RANGE_CHUNK_SIZE, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    response = Response(
+        stream_with_context(generate()),
+        206,
+        mimetype=mimetype,
+        direct_passthrough=True
+    )
+
+    response.headers.add('Content-Range', f'bytes {byte_start}-{byte_end}/{size}')
+    response.headers.add('Accept-Ranges', 'bytes')
+    response.headers.add('Content-Length', str(length))
+
+    return response
+
+
 @app.route('/api/video/<path:filename>')
 def serve_video(filename):
     """영상 스트리밍"""
@@ -1105,33 +1152,7 @@ def serve_video(filename):
     if not range_header:
         return send_file(video_path)
 
-    size = os.path.getsize(video_path)
-    byte_start, byte_end = 0, size - 1
-
-    if range_header:
-        byte_range = range_header.replace('bytes=', '').split('-')
-        byte_start = int(byte_range[0])
-        if byte_range[1]:
-            byte_end = int(byte_range[1])
-
-    length = byte_end - byte_start + 1
-
-    with open(video_path, 'rb') as f:
-        f.seek(byte_start)
-        data = f.read(length)
-
-    response = Response(
-        data,
-        206,
-        mimetype=get_mime_type(filename),
-        direct_passthrough=True
-    )
-
-    response.headers.add('Content-Range', f'bytes {byte_start}-{byte_end}/{size}')
-    response.headers.add('Accept-Ranges', 'bytes')
-    response.headers.add('Content-Length', str(length))
-
-    return response
+    return build_range_response(video_path, range_header, get_mime_type(filename))
 
 
 @app.route('/api/video-silent/<path:filename>')
@@ -1392,33 +1413,7 @@ def transcode_video(filename):
     if not range_header:
         return send_file(cache_path, mimetype='video/mp4')
 
-    size = os.path.getsize(cache_path)
-    byte_start, byte_end = 0, size - 1
-
-    if range_header:
-        byte_range = range_header.replace('bytes=', '').split('-')
-        byte_start = int(byte_range[0])
-        if byte_range[1]:
-            byte_end = int(byte_range[1])
-
-    length = byte_end - byte_start + 1
-
-    with open(cache_path, 'rb') as f:
-        f.seek(byte_start)
-        data = f.read(length)
-
-    response = Response(
-        data,
-        206,
-        mimetype='video/mp4',
-        direct_passthrough=True
-    )
-
-    response.headers.add('Content-Range', f'bytes {byte_start}-{byte_end}/{size}')
-    response.headers.add('Accept-Ranges', 'bytes')
-    response.headers.add('Content-Length', str(length))
-
-    return response
+    return build_range_response(cache_path, range_header, 'video/mp4')
 
 
 @app.route('/api/delete/<path:filename>', methods=['DELETE'])
@@ -2449,9 +2444,72 @@ scheduler.add_job(
 scheduler.start()
 
 
+import errno
+from werkzeug.serving import WSGIRequestHandler
+
+# 영상 플레이어가 탐색(seek)/중단으로 연결을 끊으면 macOS에서는 sendall이
+# EPIPE/ECONNRESET 대신 EINVAL(errno 22)을 던지기도 한다. werkzeug는 EINVAL을
+# 끊긴 연결로 인식하지 못해 트레이스백을 출력한다. 해당 errno들을
+# BrokenPipeError(ConnectionError 하위 클래스)로 변환하면 werkzeug가 이를
+# connection_dropped로 조용히 처리한다.
+_DROPPED_CONN_ERRNOS = {
+    errno.EPIPE,
+    errno.ECONNRESET,
+    errno.ECONNABORTED,
+    errno.ESHUTDOWN,
+    errno.EINVAL,
+    errno.EBADF,
+}
+
+
+class _QuietSocketWriter:
+    """wfile 프록시: 끊긴 연결의 OSError를 BrokenPipeError로 변환한다.
+
+    werkzeug의 run_wsgi는 ConnectionError/socket.timeout만 끊긴 연결로 처리하므로,
+    소켓 쓰기 시점에 EINVAL 등을 ConnectionError 계열로 바꿔 줘야 트레이스백이
+    출력되지 않는다.
+    """
+
+    def __init__(self, wrapped):
+        self._wrapped = wrapped
+
+    def write(self, data):
+        try:
+            return self._wrapped.write(data)
+        except OSError as exc:
+            if exc.errno in _DROPPED_CONN_ERRNOS:
+                raise BrokenPipeError(exc.errno, exc.strerror) from exc
+            raise
+
+    def flush(self):
+        try:
+            return self._wrapped.flush()
+        except OSError as exc:
+            if exc.errno in _DROPPED_CONN_ERRNOS:
+                raise BrokenPipeError(exc.errno, exc.strerror) from exc
+            raise
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+
+class QuietWSGIRequestHandler(WSGIRequestHandler):
+    """끊긴 연결에서 발생하는 무해한 OSError 트레이스백을 억제한다."""
+
+    def setup(self):
+        super().setup()
+        self.wfile = _QuietSocketWriter(self.wfile)
+
+
 if __name__ == '__main__':
     try:
         print(f"🗑️  캐시 자동 정리: {cleanup_interval_hours}시간마다 실행 (최대 {settings['max_age_days']}일, {settings['max_size_gb']}GB)")
-        app.run(debug=True, host='0.0.0.0', port=7777, threaded=True)
+        app.run(
+            debug=True,
+            host='0.0.0.0',
+            port=7777,
+            threaded=True,
+            request_handler=QuietWSGIRequestHandler,
+        )
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
