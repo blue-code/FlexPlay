@@ -2177,6 +2177,8 @@
                         <option value="name_desc">이름 ㅎ→ㄱ</option>
                         <option value="size_desc">큰 파일순 ↓</option>
                         <option value="size_asc">작은 파일순 ↑</option>
+                        <option value="duration_desc">긴 영상순 ↓</option>
+                        <option value="duration_asc">짧은 영상순 ↑</option>
                         <option value="random">랜덤 🔀</option>
                     </select>
                     <button class="folder-organize" id="organizeBtn" type="button" onclick="organizeOrientation()" style="display:none;" title="가로형/세로형 폴더로 정리">
@@ -2522,7 +2524,7 @@
         let railFolderNames = ['all'];      // 레일 인덱스 → 폴더명 매핑
 
         // ===== 정렬 =====
-        let currentSort = 'date_desc';      // date_desc|date_asc|name_asc|name_desc|size_desc|size_asc|random
+        let currentSort = 'date_desc';      // date_desc|date_asc|name_asc|name_desc|size_desc|size_asc|duration_desc|duration_asc|random
         const randomKeys = new Map();       // 랜덤 정렬 시 항목별 고정 키 (재렌더 안정성)
 
         function itemKey(v) {
@@ -2538,6 +2540,7 @@
             const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true, sensitivity: 'base' });
             const byDate = (a, b) => (new Date(a.modified || 0)) - (new Date(b.modified || 0));
             const bySize = (a, b) => (a.size || 0) - (b.size || 0);
+            const byDuration = (a, b) => (a.duration || 0) - (b.duration || 0);
             switch (currentSort) {
                 case 'date_asc':  arr.sort(byDate); break;
                 case 'date_desc': arr.sort((a, b) => byDate(b, a)); break;
@@ -2545,6 +2548,8 @@
                 case 'name_desc': arr.sort((a, b) => byName(b, a)); break;
                 case 'size_desc': arr.sort((a, b) => bySize(b, a)); break;
                 case 'size_asc':  arr.sort(bySize); break;
+                case 'duration_desc': arr.sort((a, b) => byDuration(b, a)); break;
+                case 'duration_asc':  arr.sort(byDuration); break;
                 case 'random':    arr.sort((a, b) => randKey(a) - randKey(b)); break;
             }
             return arr;
@@ -2558,7 +2563,7 @@
             const gs = document.querySelector('.grid-scroll'); if (gs) gs.scrollTop = 0;
         }
 
-        const SORT_VALUES = ['date_desc', 'date_asc', 'name_asc', 'name_desc', 'size_desc', 'size_asc', 'random'];
+        const SORT_VALUES = ['date_desc', 'date_asc', 'name_asc', 'name_desc', 'size_desc', 'size_asc', 'duration_desc', 'duration_asc', 'random'];
         function saveSortPreference() {
             try { localStorage.setItem('flexplay_sort', currentSort); } catch (e) {}
         }
