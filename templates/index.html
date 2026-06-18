@@ -4223,23 +4223,36 @@
             return (videos || []).find(v => v.name === filename) || null;
         }
 
+        // 브라우저 <video>가 네이티브로 재생 가능한 컨테이너. 그 외(.ts/.avi/.mkv/.flv/.wmv 등)는
+        // 코덱이 호환되더라도 컨테이너 때문에 재생이 안 되므로 자동으로 트랜스코딩(리먹스)한다.
+        // 확장자만으로 판정되므로 ffprobe 메타데이터가 아직 없어도(첫 로딩) 신뢰할 수 있다.
+        const BROWSER_NATIVE_CONTAINERS = ['.mp4', '.m4v', '.mov', '.qt', '.webm', '.ogv', '.ogg', '.ogm'];
+        function fileExtOf(filename) {
+            const i = (filename || '').lastIndexOf('.');
+            return i >= 0 ? filename.substring(i).toLowerCase() : '';
+        }
+        function needsContainerTranscode(filename) {
+            return !BROWSER_NATIVE_CONTAINERS.includes(fileExtOf(filename));
+        }
+
         // 무소음 전체재생 모드에서 코덱/컨테이너가 브라우저 비호환이면 자동 트랜스코딩 대상.
         // 무소음은 오디오를 쓰지 않으므로 오디오 코덱은 무시(needs_transcode_silent)한다.
         function shouldAutoTranscode(filename) {
             if (!silentPlaylistEnabled) return false;
             const meta = videoMetaFor(filename);
-            return !!(meta && meta.needs_transcode_silent);
+            return needsContainerTranscode(filename) || !!(meta && meta.needs_transcode_silent);
         }
 
         // 가장 빠른 재생 엔드포인트 결정
-        // - 무소음 모드 비호환 코덱 → /api/transcode?silent=1 (오디오 제거, 별도 임시 캐시 + 미사용 자동삭제)
-        // - 수동 트랜스코딩 ON → /api/transcode (오디오 포함)
+        // - 무소음 모드 비호환 컨테이너/코덱 → /api/transcode?silent=1 (오디오 제거, 별도 임시 캐시 + 미사용 자동삭제)
+        // - 브라우저 비호환 컨테이너(.ts 등) 또는 비호환 코덱, 수동 트랜스코딩 ON → /api/transcode (오디오 포함)
         // - 그 외 → 원본 /api/video
         function resolvePlaybackEndpoint(filename) {
             if (shouldAutoTranscode(filename)) {
                 return `/api/transcode/${encodeURIComponent(filename)}?silent=1`;
             }
-            if (transcodeEnabled) {
+            const meta = videoMetaFor(filename);
+            if (transcodeEnabled || needsContainerTranscode(filename) || (meta && meta.needs_transcode)) {
                 return `/api/transcode/${encodeURIComponent(filename)}`;
             }
             return `/api/video/${encodeURIComponent(filename)}`;
