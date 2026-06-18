@@ -5764,11 +5764,18 @@
                     container.appendChild(img);
                 } else if (item.type === 'video') {
                     const fullPath = item.folder ? item.name : (browsePath ? `${browsePath}/${item.name}` : item.name);
-                    // 무소음 전체재생(뷰어 fallback)에서 비호환 코덱은 자동 트랜스코딩으로 재생 (오디오 제거)
-                    const autoTranscodeViewer = viewerSilentFallbackActive && item.needs_transcode_silent;
-                    const videoUrl = autoTranscodeViewer
-                        ? `/api/transcode/${encodeURIComponent(fullPath)}?silent=1`
-                        : `/api/video/${encodeURIComponent(fullPath)}`;
+                    // 컨테이너(.ts 등)나 코덱이 브라우저 비호환이면 자동 트랜스코딩.
+                    // 확장자 기반이라 ffprobe 메타가 아직 없어도 신뢰 가능.
+                    const containerIncompatible = needsContainerTranscode(fullPath);
+                    let videoUrl;
+                    if (viewerSilentFallbackActive && (containerIncompatible || item.needs_transcode_silent)) {
+                        // 무소음 전체재생(뷰어 fallback): 오디오 제거하고 트랜스코딩
+                        videoUrl = `/api/transcode/${encodeURIComponent(fullPath)}?silent=1`;
+                    } else if (containerIncompatible || item.needs_transcode) {
+                        videoUrl = `/api/transcode/${encodeURIComponent(fullPath)}`;
+                    } else {
+                        videoUrl = `/api/video/${encodeURIComponent(fullPath)}`;
+                    }
                     const video = document.createElement('video');
 
                     // iOS 인라인 재생을 위한 모든 속성 설정
