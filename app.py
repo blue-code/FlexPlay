@@ -1366,9 +1366,12 @@ def transcode_video(filename):
     os.makedirs(cache_dir, exist_ok=True)
 
     # 캐시 파일명 생성 (원본 파일명 기반)
-    name, ext = os.path.splitext(filename)
+    # 브라우징 모드에서는 filename에 하위 경로가 포함될 수 있다("east/이름.ts").
+    # 경로 구분자를 치환해 캐시 디렉토리에 평탄한 단일 파일로 저장한다. (그대로 두면
+    # 존재하지 않는 하위 디렉토리에 쓰려다 ffmpeg가 실패해 500이 발생)
+    flat_name = os.path.splitext(filename)[0].replace('\\', '/').replace('/', '_')
     suffix = '_silent' if silent else '_transcoded'
-    cache_filename = f"{name}{suffix}.mp4"
+    cache_filename = f"{flat_name}{suffix}.mp4"
     cache_path = os.path.join(cache_dir, cache_filename)
 
     # 캐시 파일이 없거나 원본보다 오래된 경우 트랜스코딩
