@@ -2687,6 +2687,7 @@
                 if (!response.ok) throw new Error('폴더를 불러오는데 실패했습니다.');
                 const data = await response.json();
                 browseItems = (data.items || []).map((it, i) => ({ ...it, _idx: i }));
+                reconcileLocalPositions(browseItems);
                 renderFolderHead();
                 renderFolderBrowseGrid(browseItems);
             } catch (error) {
@@ -3207,6 +3208,7 @@
                     }
                 }
 
+                reconcileLocalPositions(videos);
                 if (includeMeta) {
                     renderExtensionChips(extensionMeta);
                 }
@@ -4800,6 +4802,8 @@
                         : (isFinite(videoPlayer.duration) ? videoPlayer.duration : null)
                 };
                 playbackHistory.set(filename, payload.position);
+                // 같은 기기에서 강제 종료/네트워크 실패에도 위치가 남도록 즉시 로컬 백업
+                localPosSave(filename, payload.position, payload.duration);
                 // 리스트의 진행률/완료 상태를 즉시 반영
                 updateVideoProgress(filename, payload.position, payload.duration);
 
@@ -4941,9 +4945,49 @@
             }
         }
 
+        // 로컬 영속 저장: 네트워크(beacon) 실패나 브라우저 강제 종료에도
+        // 같은 기기에서 재생 위치를 확실히 보존하기 위한 즉시(동기) 백업.
+        // 서버 저장(크로스 디바이스 이어보기)과 병행해서 사용한다.
+        const LOCAL_POS_PREFIX = 'flexplay_pos_';
+        function localPosSave(filename, position, duration) {
+            try {
+                if (!filename || !(position >= HISTORY_MIN_POSITION)) return;
+                localStorage.setItem(LOCAL_POS_PREFIX + filename, JSON.stringify({
+                    p: position,
+                    d: (duration && isFinite(duration)) ? duration : 0,
+                    t: Date.now()
+                }));
+            } catch (e) { /* 용량 초과 등은 무시 */ }
+        }
+        function localPosGet(filename) {
+            try {
+                const raw = localStorage.getItem(LOCAL_POS_PREFIX + filename);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                return (o && typeof o.p === 'number') ? o : null;
+            } catch (e) { return null; }
+        }
+        // 영상 목록의 resume_position을 로컬 저장본이 더 앞서 있으면 끌어올린다
+        // (강제 종료로 서버 저장이 누락된 경우에도 진행률/이어보기 표시가 맞도록).
+        function reconcileLocalPositions(list) {
+            (list || []).forEach(v => {
+                if (!v || !v.name) return;
+                const local = localPosGet(v.name);
+                if (local && local.p > (v.resume_position || 0)) {
+                    v.resume_position = local.p;
+                    if (!v.duration && local.d) v.duration = local.d;
+                }
+                // 메모리 맵에도 반영해 즉시 이어보기에 활용
+                const cur = playbackHistory.get(v.name) || 0;
+                if (local && local.p > cur) playbackHistory.set(v.name, local.p);
+            });
+        }
+
         function getResumePosition(filename) {
             const stored = playbackHistory.get(filename) || 0;
-            return stored >= HISTORY_MIN_POSITION ? stored : 0;
+            const local = localPosGet(filename);
+            const best = Math.max(stored, local ? local.p : 0);
+            return best >= HISTORY_MIN_POSITION ? best : 0;
         }
 
         // 저장된 위치를 영상 길이에 맞게 보정한다.
@@ -4981,12 +5025,24 @@
             return videoPlayer;
         }
 
+        let lastLocalSaveTs = 0;
         function handleProgressAutoSave() {
             if (!currentVideo) return;
             const player = getActivePlayer();
-            if (!player || (player.currentTime || 0) < HISTORY_MIN_POSITION) return;
-            if (historySaveHandle) return;
+            const pos = player ? (player.currentTime || 0) : 0;
+            if (!player || pos < HISTORY_MIN_POSITION) return;
 
+            // 로컬에는 자주(≈3초) 기록 → 브라우저 강제 종료/탭 킬에도 위치 손실을 최소화.
+            // 네트워크 없이 동기로 저장되므로 비콘이 못 떠도 같은 기기에서는 이어보기가 된다.
+            const now = Date.now();
+            if (now - lastLocalSaveTs >= 3000) {
+                lastLocalSaveTs = now;
+                playbackHistory.set(currentVideo, pos);
+                localPosSave(currentVideo, pos, player.duration);
+            }
+
+            // 서버에는 기존 간격으로 저장 (크로스 디바이스 이어보기)
+            if (historySaveHandle) return;
             historySaveHandle = setTimeout(() => {
                 savePlaybackPosition(false);
                 historySaveHandle = null;
