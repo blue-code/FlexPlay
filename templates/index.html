@@ -1274,11 +1274,11 @@
 
         .viewer-action-overlay {
             position: absolute;
-            bottom: 0;
+            top: 0;
             left: 0;
             right: 0;
-            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
-            padding: 30px 20px 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
+            padding: 20px 20px 30px;
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -1288,7 +1288,7 @@
         }
 
         .viewer-action-overlay.hidden {
-            transform: translateY(calc(100% - 50px));
+            transform: translateY(calc(-100% + 50px));
         }
 
         .viewer-header.hidden {
@@ -1304,7 +1304,7 @@
 
         .overlay-handle {
             position: absolute;
-            top: 10px;
+            bottom: 10px;
             left: 50%;
             transform: translateX(-50%);
             width: 60px;
@@ -1863,7 +1863,7 @@
         .viewer-nav-btn:hover { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
         .viewer-info { background: linear-gradient(0deg, rgba(0,0,0,.7), transparent); color: rgba(255,255,255,.55); backdrop-filter: none; }
         .viewer-action-overlay {
-            background: linear-gradient(0deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.6) 70%, transparent 100%);
+            background: linear-gradient(180deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.6) 70%, transparent 100%);
         }
         .overlay-handle { background: rgba(255,255,255,.45); }
         /* big sheet buttons — Delete = danger, Move = neutral */
