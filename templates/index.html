@@ -2564,20 +2564,43 @@
         }
 
         const SORT_VALUES = ['date_desc', 'date_asc', 'name_asc', 'name_desc', 'size_desc', 'size_asc', 'duration_desc', 'duration_asc', 'random'];
-        function saveSortPreference() {
-            try { localStorage.setItem('flexplay_sort', currentSort); } catch (e) {}
+        const SORT_FOLDER_KEY = 'flexplay_sort_by_folder';
+
+        // 정렬은 '화면(폴더)별'로 기억한다. 각 폴더가 자기만의 정렬을 갖고,
+        // 처음 들어가는 폴더는 마지막으로 쓴 전역 정렬을 기본값으로 따른다.
+        function screenSortKey() { return currentFolder || 'all'; }
+        function loadSortMap() {
+            try { return JSON.parse(localStorage.getItem(SORT_FOLDER_KEY) || '{}') || {}; }
+            catch (e) { return {}; }
         }
-        // 저장된 정렬 상태를 복원 (다음 접속에도 유지)
-        function loadSortPreference() {
+        function saveSortPreference() {
             try {
-                const v = localStorage.getItem('flexplay_sort');
-                if (v && SORT_VALUES.includes(v)) {
-                    currentSort = v;
-                    const sel = document.getElementById('sortSelect');
-                    if (sel) sel.value = v;
-                }
+                localStorage.setItem('flexplay_sort', currentSort); // 새 화면용 전역 기본값
+                const map = loadSortMap();
+                map[screenSortKey()] = currentSort;
+                localStorage.setItem(SORT_FOLDER_KEY, JSON.stringify(map));
             } catch (e) {}
         }
+        // 현재 화면(폴더)에 저장된 정렬을 적용한다. (목록을 다시 그리기 전에 호출)
+        function restoreSortForScreen() {
+            let v;
+            const map = loadSortMap();
+            v = map[screenSortKey()];
+            if (!(v && SORT_VALUES.includes(v))) {
+                try {
+                    const g = localStorage.getItem('flexplay_sort');
+                    v = (g && SORT_VALUES.includes(g)) ? g : currentSort;
+                } catch (e) { v = currentSort; }
+            }
+            if (v && SORT_VALUES.includes(v)) {
+                if (v !== currentSort && v === 'random') randomKeys.clear();
+                currentSort = v;
+                const sel = document.getElementById('sortSelect');
+                if (sel) sel.value = v;
+            }
+        }
+        // 초기 로드 시 복원 (현재 화면은 'all')
+        function loadSortPreference() { restoreSortForScreen(); }
         function refreshCurrentView() {
             if (currentFolder === 'all') {
                 displayVideos(videos);
@@ -2662,6 +2685,7 @@
 
         function selectFolder(idx) {
             currentFolder = railFolderNames[idx] || 'all';
+            restoreSortForScreen();   // 화면별 정렬 복원 (목록 로드 전)
             if (searchTerm) { searchTerm = ''; const si = document.getElementById('searchInput'); if (si) si.value = ''; const cb = document.getElementById('clearSearchBtn'); if (cb) cb.disabled = true; }
             renderFolderRail();
             if (currentFolder === 'all') {
@@ -2728,6 +2752,24 @@
             return browsePath ? `${browsePath}/${item.name}` : item.name;
         }
 
+        // 카드의 재생 상태 마크업(완료 배지 · 재생중 배지 · 이어보기 진행률) 생성.
+        // 평면 목록(displayVideos)과 폴더 탐색 그리드(renderFolderBrowseGrid)가 공통으로 쓴다.
+        // playkey = 히스토리/현재재생 식별자(파일명) → now-playing 토글과 라이브 갱신의 기준.
+        function cardStatusBits(item) {
+            const name = item.name || '';
+            const isPlaying = !!nowPlayingName && name === nowPlayingName;
+            const doneBadge = item.watched ? `<span class="status-badge done">${SVG.check}완료</span>` : '';
+            const playingBadge = `<span class="status-badge playing"><span class="pdot"></span>재생중</span>`;
+            let progPct = 0;
+            const dur = Number(item.duration || 0);
+            const pos = Number(item.resume_position || 0);
+            if (!item.watched && dur > 0 && pos > 0) {
+                progPct = Math.max(0, Math.min(100, (pos / dur) * 100));
+            }
+            const progBar = progPct > 0 ? `<div class="prog"><i style="width:${progPct.toFixed(1)}%"></i></div>` : '';
+            return { isPlaying, doneBadge, playingBadge, progBar, playkey: encodeURIComponent(name) };
+        }
+
         function renderFolderBrowseGrid(list) {
             const container = document.getElementById('videoList');
             if (!container) return;
@@ -2764,14 +2806,18 @@
                         : `<div class="thumb-placeholder">${item.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                     const dur = item.duration ? formatDurationShort(item.duration) : '';
                     const encPath = encodeURIComponent(browseItemFullPath(item));
+                    const st = cardStatusBits(item);
                     return `
-                        <div class="vcard" data-filename="${encPath}" onclick="openBrowseMediaByIdx(${i})">
+                        <div class="vcard${st.isPlaying ? ' now-playing' : ''}" data-filename="${encPath}" data-playkey="${st.playkey}" onclick="openBrowseMediaByIdx(${i})">
                             <button class="card-del" title="삭제" onclick="event.stopPropagation(); deleteBrowseVideoByIdx(${i})">${SVG.trash}</button>
                             <div class="poster">
                                 ${thumb}
                                 <div class="sheen"></div>
+                                ${st.doneBadge}
+                                ${st.playingBadge}
                                 ${dur ? `<div class="dur">${dur}</div>` : ''}
                                 <div class="play-ov"><span class="pbtn">${SVG.play}</span></div>
+                                ${st.progBar}
                             </div>
                             <div class="vmeta">
                                 <div class="vname">${escapeHtml(item.name)}</div>
@@ -2834,6 +2880,7 @@
 
         function folderGoAll() {
             currentFolder = 'all';
+            restoreSortForScreen();   // 화면별 정렬 복원 (목록 로드 전)
             browseFolder = ''; browsePath = '';
             const back = document.getElementById('folderBackBtn'); if (back) back.style.display = 'none';
             renderFolderRail();
@@ -3530,30 +3577,21 @@
                     ? `<img src="${video.thumbnail_url}${versionSuffix}" alt="" loading="lazy">`
                     : `<div class="thumb-placeholder">${video.thumbnail_pending ? '생성 중...' : '썸네일 없음'}</div>`;
                 const durText = video.duration ? formatDurationShort(video.duration) : '';
-                const isPlaying = nowPlayingName && video.name === nowPlayingName;
-                // 완료 배지(시청 완료) / 재생중 배지(.now-playing 클래스로 토글)
-                const doneBadge = video.watched
-                    ? `<span class="status-badge done">${SVG.check}완료</span>` : '';
-                const playingBadge = `<span class="status-badge playing"><span class="pdot"></span>재생중</span>`;
-                // 이어보기 진행률 (시청 완료가 아니고 저장된 위치가 있을 때)
-                let progPct = 0;
-                if (!video.watched && video.duration && video.resume_position) {
-                    progPct = Math.max(0, Math.min(100, (video.resume_position / video.duration) * 100));
-                }
-                const progBar = progPct > 0 ? `<div class="prog"><i style="width:${progPct.toFixed(1)}%"></i></div>` : '';
+                // 완료/재생중 배지 + 이어보기 진행률 (폴더 탐색 그리드와 공통 로직)
+                const st = cardStatusBits(video);
 
                 return `
-                    <div class="vcard${isPlaying ? ' now-playing' : ''}" data-filename="${encodedName}" onclick="openFolderViewer(${idx})">
+                    <div class="vcard${st.isPlaying ? ' now-playing' : ''}" data-filename="${encodedName}" data-playkey="${st.playkey}" onclick="openFolderViewer(${idx})">
                         <button class="card-del" title="삭제"
                                 onclick="event.stopPropagation(); deleteVideo(decodeURIComponent('${encodedName}'), event)">${SVG.trash}</button>
                         <div class="poster">
                             ${thumbContent}
                             <div class="sheen"></div>
-                            ${doneBadge}
-                            ${playingBadge}
+                            ${st.doneBadge}
+                            ${st.playingBadge}
                             ${durText ? `<div class="dur">${durText}</div>` : ''}
                             <div class="play-ov"><span class="pbtn">${SVG.play}</span></div>
-                            ${progBar}
+                            ${st.progBar}
                         </div>
                         <div class="vmeta">
                             <div class="vname">${escapeHtml(video.name)}</div>
@@ -3643,10 +3681,7 @@
                     videoPlayer.load();
                     applySilentAudioState();
                     videoPlayer.addEventListener('loadedmetadata', function onLoad() {
-                        const startTime = resolveStartTime();
-                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
-                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
-                        }
+                        applyResumeSeek(videoPlayer, resolveStartTime());
                         videoPlayer.playbackRate = currentPlaybackSpeed;
                         scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                         videoPlayer.play();
@@ -3666,10 +3701,7 @@
                     hls.attachMedia(videoPlayer);
 
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                        const startTime = resolveStartTime();
-                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
-                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
-                        }
+                        applyResumeSeek(videoPlayer, resolveStartTime());
                         applySilentAudioState();
                         scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                         videoPlayer.play();
@@ -3698,10 +3730,7 @@
                 videoPlayer.load();
                 applySilentAudioState();
                 videoPlayer.addEventListener('loadedmetadata', function onLoad() {
-                    const startTime = resolveStartTime();
-                    if (startTime > 0 && !isNaN(videoPlayer.duration)) {
-                        videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
-                    }
+                    applyResumeSeek(videoPlayer, resolveStartTime());
                     videoPlayer.playbackRate = currentPlaybackSpeed;
                     scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                     videoPlayer.play();
@@ -4322,10 +4351,7 @@
                     videoPlayer.addEventListener('loadedmetadata', function onLoad() {
                         // 무소음 모드 오디오 상태 적용
                         applySilentAudioState();
-                        const startTime = resolveStartTime(seekTime);
-                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
-                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
-                        }
+                        applyResumeSeek(videoPlayer, resolveStartTime(seekTime));
                         videoPlayer.playbackRate = currentPlaybackSpeed;
                         scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                         endSilentFullscreenTransition();
@@ -4360,10 +4386,7 @@
                     hls.on(Hls.Events.MANIFEST_PARSED, function() {
                         // 무소음 모드 오디오 상태 적용
                         applySilentAudioState();
-                        const startTime = resolveStartTime(seekTime);
-                        if (startTime > 0 && !isNaN(videoPlayer.duration)) {
-                            videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
-                        }
+                        applyResumeSeek(videoPlayer, resolveStartTime(seekTime));
                         scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                         endSilentFullscreenTransition();
 
@@ -4405,10 +4428,7 @@
                     // muted와 volume=0만으로도 백그라운드 음악은 보호됨
 
                     applySilentAudioState();
-                    const startTime = resolveStartTime(seekTime);
-                    if (startTime > 0 && !isNaN(videoPlayer.duration)) {
-                        videoPlayer.currentTime = Math.min(startTime, videoPlayer.duration - 0.5);
-                    }
+                    applyResumeSeek(videoPlayer, resolveStartTime(seekTime));
                     videoPlayer.playbackRate = currentPlaybackSpeed;
                     scheduleFullscreenRestore(fullscreenModeBeforeLoad);
                     endSilentFullscreenTransition();
@@ -4895,13 +4915,22 @@
             return position >= threshold;
         }
 
-        // DOM에서 해당 파일명의 카드를 찾는다 (인코딩 특수문자 안전하게 디코드 비교)
+        // DOM에서 해당 파일명의 카드를 찾는다 (playkey=파일명 기준; 폴더 탐색 그리드 포함)
         function findCardByName(filename) {
             let found = null;
-            document.querySelectorAll('.vcard[data-filename]').forEach(card => {
-                if (!found && decodeURIComponent(card.dataset.filename || '') === filename) found = card;
+            document.querySelectorAll('.vcard[data-playkey]').forEach(card => {
+                if (!found && decodeURIComponent(card.dataset.playkey || '') === filename) found = card;
             });
             return found;
+        }
+
+        // 화면에 떠 있을 수 있는 모든 목록 배열에서 같은 파일명 항목을 갱신한다
+        // (평면 목록 videos · 폴더 탐색 browseItems · 뷰어 viewerItems/currentBrowseMedia).
+        function eachListItem(filename, fn) {
+            [videos, browseItems, viewerItems, currentBrowseMedia].forEach(arr => {
+                if (!Array.isArray(arr)) return;
+                arr.forEach(v => { if (v && v.name === filename) fn(v); });
+            });
         }
 
         // 단일 카드의 완료 배지/진행률 바를 갱신 (전체 재렌더 없이 — 재생 중 깜빡임 방지)
@@ -4940,22 +4969,23 @@
             }
         }
 
-        // 메모리상의 영상 객체 진행 상태 갱신 + 카드 반영
+        // 메모리상의 영상 객체 진행 상태 갱신 + 카드 반영 (모든 목록 배열 공통)
         function updateVideoProgress(filename, position, duration) {
-            const video = videos.find(v => v.name === filename);
-            if (!video) return;
-            if (typeof position === 'number') video.resume_position = position;
-            const dur = duration || video.duration || 0;
-            if (isWatchedComplete(position, dur)) video.watched = true;
-            patchCardStatus(video);
+            let dur = Number(duration || 0);
+            let watched = false;
+            eachListItem(filename, v => {
+                if (typeof position === 'number') v.resume_position = position;
+                if (!dur && v.duration) dur = Number(v.duration);
+                if (isWatchedComplete(position, dur || v.duration || 0)) v.watched = true;
+                if (v.watched) watched = true;
+            });
+            if (isWatchedComplete(position, dur)) watched = true;
+            patchCardStatus({ name: filename, watched, resume_position: position, duration: dur });
         }
 
         function setVideoWatched(filename) {
-            const video = videos.find(v => v.name === filename);
-            if (video && !video.watched) {
-                video.watched = true;
-                patchCardStatus(video);
-            }
+            eachListItem(filename, v => { v.watched = true; });
+            patchCardStatus({ name: filename, watched: true });
         }
 
         // 로컬 영속 저장: 네트워크(beacon) 실패나 브라우저 강제 종료에도
@@ -4990,6 +5020,12 @@
                     v.resume_position = local.p;
                     if (!v.duration && local.d) v.duration = local.d;
                 }
+                // 로컬 기록이 사실상 끝까지 본 상태면 '완료'로도 반영
+                // (완료 직전 강제 종료로 서버 watched 저장이 누락된 경우 보정)
+                if (!v.watched && local && local.p) {
+                    const d = v.duration || local.d || 0;
+                    if (isWatchedComplete(local.p, d)) v.watched = true;
+                }
                 // 메모리 맵에도 반영해 즉시 이어보기에 활용
                 const cur = playbackHistory.get(v.name) || 0;
                 if (local && local.p > cur) playbackHistory.set(v.name, local.p);
@@ -5019,6 +5055,91 @@
             const video = videos.find(v => v.name === filename);
             const duration = video ? Number(video.duration || 0) : 0;
             pendingResumeTime = clampResume(getResumePosition(filename), duration);
+        }
+
+        // 이어보기 seek를 견고하게 적용한다.
+        // range 스트리밍 영상은 loadedmetadata 직후 currentTime을 줘도 seekable 범위가
+        // 아직 준비되지 않아 0으로 되돌아가는 경우가 있다. seeked/canplay/playing 이벤트와
+        // 짧은 타임아웃으로 위치가 '붙을' 때까지 여러 번 재시도해 유실을 막는다.
+        function applyResumeSeek(player, target, durationHint = 0) {
+            if (!player) return;
+            // 같은 <video> 요소를 재사용하므로, 새 호출은 이전 이어보기 시도를 무효화한다.
+            const token = (player._resumeToken || 0) + 1;
+            player._resumeToken = token;
+            if (!(target > 0)) return;
+
+            const TOL = 1.0;          // 목표 근처로 보는 허용 오차(초)
+            const MAX_ATTEMPTS = 15;
+            let attempts = 0;
+            let done = false;
+
+            function desiredTime() {
+                const dur = (isFinite(player.duration) && player.duration > 0)
+                    ? player.duration
+                    : (durationHint > 0 ? durationHint : 0);
+                if (dur > 0) return Math.min(target, Math.max(dur - 0.5, HISTORY_MIN_POSITION));
+                return target;
+            }
+
+            function isSeekable(t) {
+                try {
+                    const ranges = player.seekable;
+                    if (!ranges || ranges.length === 0) return true; // 정보 없으면 일단 시도
+                    for (let i = 0; i < ranges.length; i++) {
+                        if (t >= ranges.start(i) - 0.5 && t <= ranges.end(i) + 0.5) return true;
+                    }
+                    return false;
+                } catch (e) { return true; }
+            }
+
+            function cleanup() {
+                if (done) return;
+                done = true;
+                player.removeEventListener('seeked', onSeeked);
+                player.removeEventListener('canplay', onProgress);
+                player.removeEventListener('loadeddata', onProgress);
+                player.removeEventListener('playing', onProgress);
+            }
+
+            function trySeek() {
+                if (done || player._resumeToken !== token) { cleanup(); return; }
+                const want = desiredTime();
+                if (!(want > 0)) { cleanup(); return; }
+                if (Math.abs((player.currentTime || 0) - want) <= TOL) { cleanup(); return; }
+                if (++attempts > MAX_ATTEMPTS) { cleanup(); return; }
+                if (isSeekable(want)) {
+                    try { player.currentTime = want; } catch (e) { /* 아직 seek 불가 — 다음 이벤트에서 재시도 */ }
+                } else {
+                    // 아직 seekable 범위가 안 잡혔으면 잠시 후 재시도
+                    setTimeout(() => { if (!done && player._resumeToken === token) trySeek(); }, 150);
+                }
+            }
+
+            function onSeeked() {
+                if (done || player._resumeToken !== token) { cleanup(); return; }
+                const want = desiredTime();
+                if ((player.currentTime || 0) < want - 1.5) {
+                    // 0으로 되돌아간(snap-back) 상황 — 잠시 후 재시도
+                    setTimeout(() => { if (!done && player._resumeToken === token) trySeek(); }, 120);
+                } else {
+                    cleanup();
+                }
+            }
+
+            function onProgress() {
+                if (done || player._resumeToken !== token) { cleanup(); return; }
+                const want = desiredTime();
+                if ((player.currentTime || 0) < want - 1.5) trySeek();
+            }
+
+            player.addEventListener('seeked', onSeeked);
+            player.addEventListener('canplay', onProgress);
+            player.addEventListener('loadeddata', onProgress);
+            player.addEventListener('playing', onProgress);
+
+            trySeek();
+            // 최종 안전망: 재생이 시작됐는데도 앞부분이면 한 번 더 보정
+            setTimeout(() => { if (!done && player._resumeToken === token) onProgress(); }, 700);
         }
 
         function resolveStartTime(fallbackSeconds = 0) {
@@ -5095,9 +5216,11 @@
         // 리스트에서 '재생중' 표시를 갱신한다 (전체 재렌더 없이 클래스만 토글).
         function updateNowPlayingIndicator(filename) {
             nowPlayingName = filename || null;
-            document.querySelectorAll('.vcard[data-filename]').forEach(card => {
-                const fn = decodeURIComponent(card.dataset.filename || '');
-                card.classList.toggle('now-playing', !!filename && fn === filename);
+            document.querySelectorAll('.vcard').forEach(card => {
+                const key = card.dataset.playkey
+                    ? decodeURIComponent(card.dataset.playkey)
+                    : (card.dataset.filename ? decodeURIComponent(card.dataset.filename) : '');
+                card.classList.toggle('now-playing', !!filename && key === filename);
             });
         }
 
@@ -5847,12 +5970,7 @@
                         if (viewerSilentFallbackActive) return;
                         const dur = isFinite(video.duration) && video.duration > 0 ? video.duration : itemDuration;
                         const target = clampResume(savedPos, dur);
-                        if (target > 0) {
-                            try {
-                                const cap = (video.duration || target) - 0.3;
-                                video.currentTime = Math.min(target, cap);
-                            } catch (e) { /* seek 실패 무시 */ }
-                        }
+                        applyResumeSeek(video, target, itemDuration);
                     });
                     video.addEventListener('timeupdate', handleProgressAutoSave);
                     video.addEventListener('pause', () => savePlaybackPosition(true));

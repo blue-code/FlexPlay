@@ -754,6 +754,35 @@ def save_history(history):
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 
+def get_history_positions(history_entries=None):
+    """파일명 → {pos, watched} 매핑을 만든다 (재생중/완료/이어보기 표시용)."""
+    positions = {}
+    for entry in (history_entries if history_entries is not None else load_history()):
+        fname = entry.get('filename')
+        if not fname:
+            continue
+        try:
+            pos = float(entry.get('position') or 0)
+        except Exception:
+            pos = 0
+        positions[fname] = {'pos': pos, 'watched': bool(entry.get('watched'))}
+    return positions
+
+
+def apply_watch_status(item, history_positions):
+    """목록 항목에 watched / resume_position 을 채운다 (히스토리는 파일명 기준)."""
+    entry = history_positions.get(item.get('name')) or {}
+    pos = entry.get('pos', 0)
+    duration = item.get('duration') or 0
+    watched = bool(entry.get('watched'))
+    if not watched and duration and pos:
+        threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
+        watched = pos >= threshold
+    item['watched'] = watched
+    item['resume_position'] = pos
+    return item
+
+
 @app.route('/')
 def index():
     """메인 페이지"""
@@ -867,31 +896,9 @@ def get_videos():
     include_meta = request.args.get('with_meta') == '1'
 
     videos = get_video_files(folder_filter)
-    history_entries = load_history()
-    history_positions = {}
-    for entry in history_entries:
-        fname = entry.get('filename')
-        if not fname:
-            continue
-        try:
-            pos = float(entry.get('position') or 0)
-        except Exception:
-            pos = 0
-        history_positions[fname] = {
-            'pos': pos,
-            'watched': bool(entry.get('watched'))
-        }
-
+    history_positions = get_history_positions()
     for video in videos:
-        hist_entry = history_positions.get(video['name']) or {}
-        pos = hist_entry.get('pos', 0)
-        duration = video.get('duration') or 0
-        watched = bool(hist_entry.get('watched'))
-        if not watched and duration and pos:
-            threshold = max(duration * WATCH_COMPLETE_RATIO, duration - WATCH_COMPLETE_OFFSET)
-            watched = pos >= threshold
-        video['watched'] = watched
-        video['resume_position'] = pos
+        apply_watch_status(video, history_positions)
     available_extensions = []
 
     if include_meta:
@@ -964,6 +971,7 @@ def browse_directory():
 
     # 현재 경로에서 폴더와 파일 목록 가져오기
     items = []
+    history_positions = get_history_positions()
 
     try:
         for entry in os.listdir(current_path):
@@ -994,7 +1002,7 @@ def browse_directory():
                         stat.st_mtime,
                         media_info.get('duration') if media_info else None
                     )
-                    items.append({
+                    items.append(apply_watch_status({
                         'name': entry,
                         'type': 'video',
                         'path': entry,
@@ -1004,7 +1012,7 @@ def browse_directory():
                         'thumbnail_url': thumbnail_url,
                         'thumbnail_pending': thumbnail_pending,
                         **media_info
-                    })
+                    }, history_positions))
 
                 # 이미지 파일
                 elif ext in IMAGE_EXTENSIONS:
