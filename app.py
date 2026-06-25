@@ -408,6 +408,8 @@ def cleanup_orphan_thumbnails(retention_days):
 
         try:
             for file in os.listdir(folder_path):
+                if is_hidden_file(file):
+                    continue
                 file_path = os.path.join(folder_path, file)
                 if not os.path.isfile(file_path):
                     continue
@@ -686,6 +688,17 @@ def compute_transcode_requirement(file_path, metadata):
     }
 
 
+def is_hidden_file(name):
+    """숨김 파일(.) 및 macOS AppleDouble(._) 동반 파일 여부.
+
+    exFAT/FAT/네트워크 드라이브 등에 파일을 복사하면 macOS가 리소스 포크·확장속성을
+    담은 '._파일명' 동반 파일을 만든다. 이건 실제 미디어가 아니라서 ffmpeg가 처리하지
+    못하고(moov atom not found / Invalid data, exit 183) 썸네일·ffprobe가 실패한다.
+    이름이 '.'로 시작하면 숨김/AppleDouble 모두 걸러진다.
+    """
+    return name.startswith('.')
+
+
 def get_video_files(folder_filter=None):
     """영상 파일 목록 가져오기
 
@@ -707,6 +720,8 @@ def get_video_files(folder_filter=None):
             continue
 
         for file in os.listdir(folder_path):
+            if is_hidden_file(file):
+                continue
             file_path = os.path.join(folder_path, file)
             if os.path.isfile(file_path):
                 ext = os.path.splitext(file)[1].lower()
@@ -869,6 +884,8 @@ def get_folders():
         video_count = 0
         if os.path.exists(folder_path):
             for file in os.listdir(folder_path):
+                if is_hidden_file(file):
+                    continue
                 file_path = os.path.join(folder_path, file)
                 if os.path.isfile(file_path):
                     ext = os.path.splitext(file)[1].lower()
